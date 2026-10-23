@@ -8,12 +8,12 @@ import androidx.compose.ui.Modifier
 
 /** Placeholder until the dashboard feature is implemented. */
 @Composable
-fun DashboardScreen(onBack: () -> Unit) {
+fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
     Column(Modifier.fillMaxSize().safeDrawingPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center) {
         Text("Dashboard", style = MaterialTheme.typography.headlineMedium)
         Text("This screen will be built next.")
-        TextButton(onClick = onBack) { Text("Back to welcome") }
+        TextButton(onClick = onBack, enabled = !isSigningOut) { Text(if (isSigningOut) "Signing out…" else "Sign out") }
     }
 }
