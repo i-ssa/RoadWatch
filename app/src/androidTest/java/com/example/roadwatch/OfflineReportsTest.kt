@@ -19,9 +19,14 @@ class OfflineReportsTest {
         first.close()
         val restored=ReportStore(context,name)
         try {
-            assertEquals("pending",restored.reports("account-a").single().status)
+            assertEquals("draft",restored.reports("account-a").single().status)
             assertTrue(restored.reports("account-b").isEmpty())
             assertEquals(1,restored.captures(id).size)
+            assertFalse(restored.submit(id,"account-b"))
+            assertEquals("draft",restored.reports("account-a").single().status)
+            assertTrue(restored.submit(id,"account-a"))
+            assertEquals("pending",restored.reports("account-a").single().status)
+            assertFalse(restored.submit(id,"account-a"))
             restored.markSynced(id)
             assertEquals("synced",restored.reports("account-a").single().status)
         } finally {
@@ -35,9 +40,27 @@ class OfflineReportsTest {
         try {
             store.start("account-a"); store.start("account-b")
             store.recoverInterrupted("account-a")
-            assertEquals("pending",store.reports("account-a").single().status)
+            assertEquals("draft",store.reports("account-a").single().status)
             assertEquals("recording",store.reports("account-b").single().status)
         } finally { store.close(); context.deleteDatabase(name) }
+    }
+    @Test fun upgradingReturnsLegacyPendingReportsToDrafts() {
+        val name="migration-test-${System.nanoTime()}.db"
+        val legacy=context.openOrCreateDatabase(name,0,null)
+        legacy.execSQL("CREATE TABLE reports(id TEXT PRIMARY KEY, owner TEXT NOT NULL, started INTEGER NOT NULL, status TEXT NOT NULL, sync_error TEXT)")
+        legacy.execSQL("CREATE TABLE captures(id TEXT PRIMARY KEY, report_id TEXT NOT NULL, path TEXT NOT NULL, boxes TEXT NOT NULL)")
+        for(status in listOf("pending","synced","recording")) {
+            legacy.execSQL("INSERT INTO reports VALUES(?, 'account-a', 0, ?, NULL)",arrayOf(status,status))
+        }
+        legacy.version=1
+        legacy.close()
+        val upgraded=ReportStore(context,name)
+        try {
+            val reports=upgraded.reports("account-a").associateBy { it.id }
+            assertEquals("draft",reports.getValue("pending").status)
+            assertEquals("synced",reports.getValue("synced").status)
+            assertEquals("recording",reports.getValue("recording").status)
+        } finally { upgraded.close(); context.deleteDatabase(name) }
     }
     @Test fun recreatingScreenDoesNotFinalizeAnActiveScan() {
         val name="active-test-${System.nanoTime()}.db"

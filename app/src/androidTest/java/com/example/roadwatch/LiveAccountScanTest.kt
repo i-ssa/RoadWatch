@@ -36,12 +36,12 @@ class LiveAccountScanTest {
         compose.waitUntil(45000) { store.reports(owner).any { it.id !in previous } }
         // Allow the first inference to complete before stopping the camera.
         compose.waitUntil(45000) {
-            compose.onAllNodes(androidx.compose.ui.test.hasText("Scanning · no pothole in the latest frame") or androidx.compose.ui.test.hasText("Possible pothole detected · saved offline")).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodes(androidx.compose.ui.test.hasText("Looking for possible potholes") or androidx.compose.ui.test.hasText("Possible potholes saved for review")).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Stop scan & save report").performClick()
+        compose.onNodeWithText("Stop & review").performClick()
         compose.waitUntil(15000) { finished }
         val report=store.reports(owner).single { it.id !in previous }
-        assertEquals("pending",report.status)
+        assertEquals("draft",report.status)
         println("LIVE_REPORT_ID=${report.id}")
         println("LIVE_CAPTURE_COUNT=${report.detections}")
     }
@@ -52,6 +52,7 @@ class LiveAccountScanTest {
         val client=checkNotNull(RoadWatchBackend.client)
         val owner=checkNotNull(client.auth.currentUserOrNull()?.id)
         val store=ReportStore.get(context)
+        assertTrue(store.submit(id,owner))
         ReportSyncWorker.schedule(context,owner)
         compose.waitUntil(60000) { store.reports(owner).any { it.id==id && it.status=="synced" } }
         val response=client.httpClient.get("${BuildConfig.SUPABASE_URL}/rest/v1/road_reports") {
