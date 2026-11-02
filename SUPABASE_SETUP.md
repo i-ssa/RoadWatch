@@ -32,7 +32,7 @@ The app restores the SDK's persisted session with auto-refresh disabled during s
 
 Run `supabase/migrations/20261101_offline_reports.sql` in the Supabase SQL editor. This creates `road_reports`, a private `roadwatch-captures` bucket, and owner-only row/storage policies. The Android app uses only the public key plus the signed-in user's token. Do not put administrative credentials in the APK.
 
-Camera scanning uses the bundled cleaned-v3 YOLO11s ONNX model without a network. Start a scan while parked; allow camera access. The app analyzes at most one frame every two seconds and saves road images with possible potholes and normalized boxes to private files/SQLite. Stop the scan to queue the report, including scans with zero detections. Interrupted scans are recovered on the next launch. No location or severity is invented. Leaving the app stops and queues the current scan; background recording is not implemented.
+Camera scanning uses the bundled cleaned-v3 YOLO11s ONNX model without a network. Start a scan while parked; allow camera access. The app analyzes at most one frame every two seconds and saves road images with possible potholes and normalized boxes to private files/SQLite. Stop the scan to save a draft, including scans with zero detections. Interrupted scans are recovered as drafts on the next launch. Open Detections, review the captures, and tap Submit report to queue an upload. Drafts never upload automatically. Upgrading from the original offline-scans release returns unsynced pending reports to drafts; already synced reports remain synced. Location is optional. A fresh foreground fix, when available, is stored with latitude, longitude, accuracy and capture time inside each capture JSON object. Missing coordinates stay null. Severity is not estimated. No additional SQL columns are needed for coordinates because captures is JSONB. Leaving the app stops and saves the current scan as a draft; background recording is not implemented.
 
 WorkManager retries uploads with a connected-network constraint and exponential backoff. Android controls exact scheduling, so sync is eventual rather than instantaneous. Stable UUID paths and database upserts make retries safe if the connection drops after a server write. Local data is retained after sync for offline review; there is no automatic retention cleanup yet. Detections are model suggestions and may contain missed/duplicate potholes across frames.
 
@@ -47,16 +47,22 @@ python scripts/export_android_model.py /path/to/verified/best.pt
 ### Acceptance checks
 
 1. Configure Supabase, apply the migration, sign in online, then force-stop and reopen in airplane mode: the dashboard should open under the same account.
-2. With airplane mode on, complete a camera scan and review its saved captures. Force-stop/reopen: the report remains pending.
-3. Restore internet and wait for WorkManager (or tap Retry sync); verify the row and private images belong to the same account and the report becomes Synced.
+2. With airplane mode on, complete a camera scan and review its saved captures. Force-stop/reopen: the report remains a draft and does not upload after reconnecting until explicitly submitted.
+3. Review the draft and tap Submit report. Restore internet and wait for WorkManager (or tap Retry sync); verify the row and private images belong to the same account and the report becomes Synced.
 4. Drop connectivity during upload and retry: one report row and stable image paths should remain.
 5. Sign out offline, sign in to a different account: the previous account's reports must remain hidden and must not upload. Sign back in to resume them.
 6. Test camera denial, unavailable camera, interrupted scan, expired access token, invalid refresh token, and database/storage policy errors on a real device. Emulator/unit tests do not establish phone performance or real Supabase delivery.
 
 ### Automated verification
 
-Run `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:connectedDebugAndroidTest` with an emulator or device attached. Device tests cover restoring an expired session without a server connection, SQLite persistence and account isolation, interrupted-scan recovery, active scans surviving screen recreation, bundled ONNX inference, camera capture and report queueing, and dashboard navigation.
+Run `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:connectedDebugAndroidTest` with an emulator or device attached. Device tests cover restoring an expired session without a server connection, SQLite persistence and account isolation, interrupted-scan recovery, active scans surviving screen recreation, bundled ONNX inference, camera capture, explicit submission, upgrade migration, and dashboard navigation.
 
 `LiveAccountScanTest` is skipped by default because it uses the account already signed in on the device. For an explicit acceptance check, disable the emulator's Wi-Fi/mobile data and run `recordOfflineScan` with instrumentation argument `liveAccount=true`. Re-enable connectivity, then run `syncRecordedScan` with `liveAccount=true` and `reportId` set to the UUID printed by the first phase. It verifies the actual report row and every uploaded private image. This creates a real emulator test report in that account; its model suggestions are not verified road defects.
 
-On 2 November 2026, the debug build, two JVM tests, nine regular device tests, and both live acceptance phases passed. A force-stopped app reopened directly to the saved account's dashboard with emulator Wi-Fi and mobile data disabled. The offline emulator scan uploaded one report and one capture after reconnecting.
+On 2 November 2026, the debug build, two JVM tests, nine regular device tests, and both live acceptance phases passed. A force-stopped app reopened directly to the saved account's dashboard with emulator Wi-Fi and mobile data disabled. The offline emulator scan uploaded one report and one capture after reconnecting. These results predate the draft approval flow; rerun acceptance checks for that flow.
+
+## Private hazard map and local cleanup
+
+The Map tab merges this account’s local geolocated captures with the latest 500 cloud reports available through owner-only RLS. Refresh requires connectivity; cached coordinates are account-specific and stored in private files. OpenStreetMap basemap tiles require internet. A shared/public hazard feed is not enabled by this schema.
+
+Only drafts can be edited. Removing a synced report locally frees its images on this device and does not delete the cloud copy. Cloud deletion is not implemented. During sign-out, upload work is cancelled and later requests check the account generation. A request already accepted by the server may still complete. Token refresh uses a bounded lock; the lock no longer spans image uploads.

@@ -71,7 +71,9 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
         else route = "Home"
     }
     if (route == "Scan" && owner != null) {
-        com.example.roadwatch.ui.scan.ScanScreen(owner) { scanning = false; route = "Detections" }
+        MaterialTheme(colorScheme=colors,typography=PreviewTypography) {
+            com.example.roadwatch.ui.scan.ScanScreen(owner) { scanning = false; route = "Detections" }
+        }
         return
     }
     MaterialTheme(colorScheme = colors, typography = PreviewTypography) {
@@ -125,11 +127,11 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                     Heading(listOf("Mount your phone.\nKeep your focus.", "Start a scan.\nLet it look.", "Take a look.\nThen decide.")[step])
                     Body(listOf("Secure your phone with a clear view of the road ahead.",
                         "RoadWatch will look for possible road defects along your route.",
-                        "Review captured defects before preparing a report.")[step])
+                        "Review captured defects before submitting a report.")[step])
                     Spacer(Modifier.height(48.dp))
                     Body(listOf("Set up while safely parked. Let a passenger handle changes during a journey.",
                         "Camera scans run on your phone, even without internet. Allow camera access to begin.",
-                        "Scan reports save on your device and sync to your account when internet returns.")[step])
+                        "Scans save as drafts on your device. Review and submit a report to sync it to your account.")[step])
                     Spacer(Modifier.height(24.dp))
                     Action(if (step == 2) "Open RoadWatch" else "Next") { if (step == 2) completeIntro() else step++ }
                     if (step > 0) TextButton(onClick = { step-- }) { Text("Back") }
@@ -157,7 +159,7 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                         Action("Stop scan & review") { scanning = false; route = "Detections" }
                     }
                     "Detections" -> {
-                        Heading("Detections"); Body("Let’s check what was spotted. You decide what goes into a report.")
+                        Heading("Detections"); Body("Review what was spotted before submitting a report.")
                         if (owner != null) {
                             com.example.roadwatch.ui.scan.ReportsScreen(owner)
                         } else if (captured) {
@@ -174,15 +176,8 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                             Action("Start scan") { dialog = "setup" } }
                     }
                     "Map" -> {
-                        Heading("Road hazard map"); Body("See what’s been reported along the roads around you.")
-                        val line = colors.outlineVariant
-                        Canvas(Modifier.fillMaxWidth().height(250.dp).padding(vertical = 24.dp)
-                            .semantics { contentDescription = "Map illustration, no live hazard data" }) {
-                            drawRect(line.copy(alpha = .2f)); drawLine(line, Offset(0f,size.height),Offset(size.width,0f),24f)
-                            drawLine(line,Offset(size.width*.2f,0f),Offset(size.width*.8f,size.height),24f)
-                        }
-                        Caption("Illustration · no live data")
-                        Heading("A little local knowledge"); Body("Once the map is connected, you’ll be able to explore an area or choose to use your current location.")
+                        if(owner!=null) com.example.roadwatch.ui.map.HazardMapScreen(owner)
+                        else { Heading("Your hazard map"); Body("Sign in and enable location during a camera scan to see your captures on the map.") }
                     }
                     "Profile" -> {
                         IconBadge(3); Heading("Your space."); Body("A few things to make RoadWatch yours.")
@@ -206,16 +201,16 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
         dialog?.let { kind ->
             val title = when(kind) { "setup" -> "Before we head out"; "stop" -> "End this sample scan?"; "report" -> "Prepare your report"; "signout" -> "Sign out?"; "inspect" -> "Check before including"; "privacy" -> "Privacy & permissions"; "notifications" -> "Notifications"; "draft" -> "Sample draft prepared"; "about" -> "RoadWatch AI"; else -> "Let’s get you started" }
             val body = when(kind) {
-                "setup" -> if (owner != null) "Secure your phone while parked. Allow camera access to scan for possible potholes. Reports and captures are saved on this device and uploaded to your account when connected. Location is not recorded yet." else "Sample scanning only."
+                "setup" -> if (owner != null) "Secure your phone while parked. Allow camera access to scan for possible potholes. Scans save as drafts on this device. Review and submit a report to upload it when connected. You can optionally attach location to captures." else "Sample scanning only."
                 "stop" -> "Stop scanning before moving to another screen. You can review any sample capture afterwards."
                 "report" -> "Possible pothole · sample location unconfirmed. No recipient is configured. This version can prepare a sample draft but cannot send a report."
                 "draft" -> "Your sample draft is ready for review in this session. Nothing has been sent."
                 "signout" -> "You can sign in again whenever you’re ready."
                 "inspect" -> "This is an illustrated sample. No real defect, depth, or severity has been measured."
-                "privacy" -> "Camera access is used only while scanning. Captured road images and reports are stored privately on this device and synced to your account. Location is not recorded. Sign out stops this account from uploading until you sign in again."
+                "privacy" -> "Camera access is used only while scanning. Captured road images and reports are stored privately on this device. Reports sync to your account only after you submit them. Location is optional and used only during scanning; submitted coordinates appear on your private account map. Sign out stops this account from uploading until you sign in again."
                 "notifications" -> "Report updates and hazard alerts are not connected yet."
                 "about" -> "RoadWatch AI · YOLO11s cleaned-v3 pothole detection on your device. Model suggestions need review."
-                else -> "Start a sample scan, review your captures, then choose what to include in a report. Replay the introduction from Profile."
+                else -> if (owner != null) "Start a camera scan, review its saved captures in Detections, then submit the report when ready. Replay the introduction from Profile." else "Start a sample scan, review your captures, then choose what to include in a report. Replay the introduction from Profile."
             }
             AlertDialog(onDismissRequest = { dialog = null }, shape = RoundedCornerShape(16.dp), containerColor = colors.background, tonalElevation = 0.dp, title = { Text(title, Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }, text = { Text(body, textAlign = TextAlign.Center) },
                 confirmButton = { TextButton(onClick = {

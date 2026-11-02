@@ -9,6 +9,10 @@ val authProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
+val releaseProperties = Properties().apply {
+    val file = rootProject.file(".signing/release.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 fun authConfig(name: String): String = "\"" +
     (authProperties.getProperty(name) ?: System.getenv(name).orEmpty())
         .replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -21,6 +25,9 @@ android {
 
     defaultConfig {
         applicationId = "com.example.roadwatch"
+        providers.gradleProperty("roadwatchAbi").orNull?.let { phoneAbi ->
+            ndk { abiFilters += phoneAbi }
+        }
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -31,8 +38,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseProperties.isNotEmpty()) create("roadwatchRelease") {
+            storeFile = rootProject.file(releaseProperties.getProperty("storeFile"))
+            storePassword = releaseProperties.getProperty("storePassword")
+            keyAlias = releaseProperties.getProperty("keyAlias")
+            keyPassword = releaseProperties.getProperty("keyPassword")
+        }
+    }
     buildTypes {
         release {
+            if (releaseProperties.isNotEmpty()) signingConfig = signingConfigs.getByName("roadwatchRelease")
             optimization {
                 enable = false
             }
@@ -42,6 +58,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    // Compress native libraries so one APK can include every supported ABI and fit Drive uploads.
+    packaging { jniLibs { useLegacyPackaging = true } }
     buildFeatures {
         compose = true
         buildConfig = true

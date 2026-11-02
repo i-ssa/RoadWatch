@@ -22,7 +22,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.roadwatch.data.reports.ReportStore
-import com.example.roadwatch.data.reports.ReportSyncWorker
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -33,6 +32,16 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
     val lifecycle = LocalLifecycleOwner.current
     var permission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED) }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permission=it }
+    var locationEnabled by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED) }
+    val locationRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        locationEnabled=it.values.any { granted -> granted }
+    }
+    val locations=remember { ScanLocation(context) }
+    DisposableEffect(locationEnabled) {
+        if(locationEnabled) locations.start()
+        onDispose { locations.close() }
+    }
+    var latency by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf("Loading pothole detector…") }
     var count by remember { mutableIntStateOf(0) }
     var stopping by remember { mutableStateOf(false) }
@@ -50,7 +59,10 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
             AndroidView(factory={preview},modifier=Modifier.weight(1f).fillMaxWidth())
             Text(message)
             Text("$count captures saved on this device")
-            Text("Stopping saves your report for automatic sync. Location is not recorded yet.")
+            Text("Stopping saves a draft. Review and submit it from Detections.")
+            if(!locationEnabled) TextButton(onClick={locationRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))}) { Text("Add location to captures") }
+            else Text("Location enabled · captures use a fresh fix when available")
+            if(latency>0) Text("Last analysis: $latency ms")
             Button(onClick={stopping=true; stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth()) { Text(if(stopping) "Saving…" else "Stop scan & save report") }
         }
     }
@@ -68,7 +80,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                 active.set(false)
                 provider?.unbindAll()
                 executor.execute {
-                    reportId?.let { store.finish(it); ReportSyncWorker.schedule(context,owner) }
+                    reportId?.let { store.finish(it) }
                     detector?.close()
                     main.execute { if(navigate) onFinished() }
                 }
@@ -98,10 +110,14 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                             val matrix=Matrix().apply { postRotate(image.imageInfo.rotationDegrees.toFloat()) }
                             val bitmap=Bitmap.createBitmap(raw,0,0,raw.width,raw.height,matrix,true)
                             try {
+                                val location=locations.current()
+                                val started=android.os.SystemClock.elapsedRealtime()
                                 val boxes=detector!!.detect(bitmap)
+                                val elapsed=android.os.SystemClock.elapsedRealtime()-started
+                                main.execute { latency=elapsed }
                                 if(boxes.isNotEmpty()) {
                                     val bytes=ByteArrayOutputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG,85,it); it.toByteArray() }
-                                    store.addCapture(reportId!!,bytes,PotholeDetector.json(boxes))
+                                    store.addCapture(reportId!!,bytes,PotholeDetector.json(boxes),location)
                                     main.execute { count++; message="Possible pothole detected · saved offline" }
                                 } else main.execute { message="Scanning · no pothole in the latest frame" }
                             } finally { if(bitmap!==raw) bitmap.recycle(); raw.recycle() }

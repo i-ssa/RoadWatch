@@ -37,6 +37,10 @@ fun RoadWatchApp(auth: AuthViewModel) {
             loading = state.loading, error = state.error,
             onSave = auth::updatePassword, onCancel = auth::signOut
         )
+        state.signedIn && state.userId == null -> Column(Modifier.fillMaxSize(), horizontalAlignment=Alignment.CenterHorizontally) {
+            Text("Your saved account is incomplete. Sign out and sign in again to use the camera scanner.")
+            TextButton(onClick=auth::signOut,enabled=!state.loading) { Text("Sign out") }
+        }
         state.signedIn -> Column(Modifier.fillMaxSize()) {
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Box(Modifier.weight(1f)) {

@@ -25,7 +25,7 @@ class CameraScanTest {
             compose.waitUntil(timeoutMillis=45000) { store.reports(owner).isNotEmpty() }
             compose.onNodeWithText("Stop scan & save report").performClick()
             compose.waitUntil(timeoutMillis=15000) { finished }
-            assertEquals("pending",store.reports(owner).single().status)
+            assertEquals("draft",store.reports(owner).single().status)
         } finally {
             store.reports(owner).forEach { report ->
                 store.captures(report.id).forEach { java.io.File(it.path).delete() }
