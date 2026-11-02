@@ -1,6 +1,7 @@
 package com.example.roadwatch.ui.dashboard
 
 import android.content.Context
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -31,6 +32,19 @@ class DashboardScreenTest {
         compose.onNodeWithText("Your space.").assertIsDisplayed()
         compose.onNodeWithText("Use device appearance").performClick()
         compose.runOnIdle { assertEquals("system", preferences.getString("appearance", null)) }
+    }
+    @Test fun mapFillsViewportAndBackReturnsHome() {
+        preferences.edit().putBoolean("intro_v1",true).commit()
+        compose.setContent { DashboardScreen(onBack={},owner="layout-test") }
+        compose.onNode(hasText("Map") and hasClickAction()).performClick()
+        compose.onNodeWithTag("journey-map").assertIsDisplayed()
+        val root=compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val map=compose.onNodeWithTag("journey-map").fetchSemanticsNode().boundsInRoot
+        assertEquals(root.height,map.height,1f)
+        assertEquals(root.width,map.width,1f)
+        compose.onNodeWithContentDescription("RoadWatch AI").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back to Home").performClick()
+        compose.onNodeWithText("Welcome to RoadWatch.").assertIsDisplayed()
     }
     @Test fun sampleScanProducesReviewableDetection() {
         preferences.edit().putBoolean("intro_v1", true).commit()

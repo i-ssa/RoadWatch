@@ -11,6 +11,18 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -46,26 +58,67 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
     var count by remember { mutableIntStateOf(0) }
     var stopping by remember { mutableStateOf(false) }
     var stop by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val preview = remember { PreviewView(context) }
+    var elapsed by remember { mutableLongStateOf(0L) }
+    var showInfo by remember { mutableStateOf(false) }
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var torch by remember { mutableStateOf(false) }
+    val paused=message.startsWith("Scanning paused") || message.startsWith("Camera unavailable")
+    JourneySystemBars(darkIcons=false)
+    LaunchedEffect(permission,stopping,paused) {
+        if(permission && !stopping && !paused) while(true) { delay(1000); elapsed++ }
+    }
+    val preview = remember { PreviewView(context).apply { scaleType=PreviewView.ScaleType.FILL_CENTER } }
     BackHandler { if(!stopping) { if(stop != null) { stopping=true; stop?.invoke() } else onFinished() } }
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
-        Text("Road scan",style=MaterialTheme.typography.headlineSmall)
-        Text("Keep the phone mounted. Set up while parked.")
-        if(!permission) {
-            Text("Camera access is needed to detect potholes. Scanning works without internet.")
-            Button(onClick={request.launch(Manifest.permission.CAMERA)}) { Text("Allow camera") }
-            TextButton(onClick=onFinished) { Text("Back") }
-        } else {
-            AndroidView(factory={preview},modifier=Modifier.weight(1f).fillMaxWidth())
-            Text(message)
-            Text("$count captures saved on this device")
-            Text("Stopping saves a draft. Review and submit it from Detections.")
-            if(!locationEnabled) TextButton(onClick={locationRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))}) { Text("Add location to captures") }
-            else Text("Location enabled · captures use a fresh fix when available")
-            if(latency>0) Text("Last analysis: $latency ms")
-            Button(onClick={stopping=true; stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth()) { Text(if(stopping) "Saving…" else "Stop scan & save report") }
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF101813))) {
+        val compact=maxHeight<500.dp
+        if(permission) AndroidView(factory={preview},modifier=Modifier.fillMaxSize())
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.55f),Color.Transparent,Color.Transparent,Color.Black.copy(alpha=.6f)))))
+        if(permission) Canvas(Modifier.fillMaxSize().semantics { contentDescription="Camera viewfinder" }) {
+            val w=size.width;val h=size.height;val l=w*.12f;val r=w*.88f;val t=h*.28f;val b=h*.62f;val arm=26.dp.toPx()
+            val c=Color.White.copy(alpha=.55f);val stroke=2.dp.toPx()
+            for((x,y,sx,sy) in listOf(listOf(l,t,1f,1f),listOf(r,t,-1f,1f),listOf(l,b,1f,-1f),listOf(r,b,-1f,-1f))) {
+                drawLine(c,Offset(x,y),Offset(x+arm*sx,y),stroke)
+                drawLine(c,Offset(x,y),Offset(x,y+arm*sy),stroke)
+            }
+        }
+        Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+            JourneyButton("End scan and review","back",{ if(!stopping) { if(stop!=null) { stopping=true;stop?.invoke() } else onFinished() } },enabled=!stopping,dark=true)
+            JourneyPill(if(!permission) "ROAD SCAN" else if(stopping) "SAVING" else if(paused) "PAUSED" else "%02d:%02d · SCANNING".format(elapsed/60,elapsed%60),dark=true,indicator=if(paused) Color(0xFFFFC76F) else if(permission) Color(0xFFA9DFB8) else null)
+            JourneyButton("Scan information","info",{showInfo=true},dark=true)
+        }
+        if(permission) Column(Modifier.align(Alignment.CenterEnd).padding(end=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            JourneyButton(if(locationEnabled) "Capture location information" else "Enable capture location","locate",{if(locationEnabled) showInfo=true else locationRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))},dark=true)
+            if(camera?.cameraInfo?.hasFlashUnit()==true) JourneyButton(if(torch) "Turn torch off" else "Turn torch on","flash",{torch=!torch;camera?.cameraControl?.enableTorch(torch)},dark=true,active=torch)
+        }
+        Surface(Modifier.align(if(compact) Alignment.BottomStart else Alignment.BottomCenter).navigationBarsPadding().padding(20.dp).widthIn(max=if(compact) 360.dp else 480.dp).fillMaxWidth(),shape=RoundedCornerShape(28.dp),color=Color(0xF51B2921),contentColor=Color.White) {
+            Column(Modifier.padding(if(compact) 18.dp else 22.dp),verticalArrangement=Arrangement.spacedBy(if(compact) 12.dp else 16.dp)) {
+                if(permission) {
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if(paused) "Scan paused" else "Watching the road",fontSize=20.sp,fontWeight=FontWeight.SemiBold)
+                            Text(if(message.startsWith("Scanning paused") || message.startsWith("Camera unavailable")) message else if(count>0) "Possible potholes saved for review" else if(latency==0L) "Connecting camera…" else "Looking for possible potholes",fontSize=13.sp,color=Color(0xFFB9C8BD))
+                        }
+                        Column(horizontalAlignment=Alignment.End) {
+                            Text("$count",fontSize=28.sp,fontWeight=FontWeight.SemiBold)
+                            Text("captures",fontSize=11.sp,color=Color(0xFFB9C8BD))
+                        }
+                    }
+                    Button(onClick={stopping=true;stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDBF0DF),contentColor=Color(0xFF133721))) {
+                        JourneyGlyph("stop",Color(0xFF133721));Spacer(Modifier.width(10.dp));Text(if(stopping) "Saving…" else "Stop & review")
+                    }
+                    if(!compact) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                        Text("Saved as a private draft",fontSize=11.sp,color=Color(0xFFB9C8BD))
+                        Text(if(locationEnabled) "Location enabled" else "Location off",fontSize=11.sp,color=Color(0xFFB9C8BD))
+                    }
+                } else {
+                    Text("Your road. A clearer view.",fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Allow the camera to scan for possible potholes. Set up your phone while parked.",color=Color(0xFFB9C8BD))
+                    Button(onClick={request.launch(Manifest.permission.CAMERA)},modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDBF0DF),contentColor=Color(0xFF133721))) { Text("Allow camera") }
+                }
+            }
         }
     }
+    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Scanning runs on this phone. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
     if(permission) DisposableEffect(owner,lifecycle) {
         val executor = Executors.newSingleThreadExecutor()
         val active = AtomicBoolean(true)
@@ -128,7 +181,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                     } finally { image.close() }
                 }
                 provider!!.unbindAll()
-                provider!!.bindToLifecycle(lifecycle,CameraSelector.DEFAULT_BACK_CAMERA,cameraPreview,analysis)
+                camera=provider!!.bindToLifecycle(lifecycle,CameraSelector.DEFAULT_BACK_CAMERA,cameraPreview,analysis)
             } catch(e: Exception) { message="Camera unavailable. Stop to return to your reports." }
         },main)
         onDispose { lifecycle.lifecycle.removeObserver(observer); stop=null; finish(false) }

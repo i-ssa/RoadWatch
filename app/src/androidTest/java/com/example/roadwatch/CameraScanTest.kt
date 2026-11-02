@@ -23,7 +23,7 @@ class CameraScanTest {
         try {
             compose.setContent { ScanScreen(owner) { finished=true } }
             compose.waitUntil(timeoutMillis=45000) { store.reports(owner).isNotEmpty() }
-            compose.onNodeWithText("Stop scan & save report").performClick()
+            compose.onNodeWithText("Stop & review").performClick()
             compose.waitUntil(timeoutMillis=15000) { finished }
             assertEquals("draft",store.reports(owner).single().status)
         } finally {

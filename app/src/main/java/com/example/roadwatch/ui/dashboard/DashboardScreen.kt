@@ -70,6 +70,12 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
         else if (scanning) { pendingRoute = "Detections"; dialog = "stop" }
         else route = "Home"
     }
+    if (route == "Map" && owner != null && !onboarding) {
+        MaterialTheme(colorScheme=colors,typography=PreviewTypography) {
+            com.example.roadwatch.ui.map.HazardMapScreen(owner,onBack={route="Home"},onStartScan={route="Scan";scanning=true},onReports={route="Detections"})
+        }
+        return
+    }
     if (route == "Scan" && owner != null) {
         MaterialTheme(colorScheme=colors,typography=PreviewTypography) {
             com.example.roadwatch.ui.scan.ScanScreen(owner) { scanning = false; route = "Detections" }

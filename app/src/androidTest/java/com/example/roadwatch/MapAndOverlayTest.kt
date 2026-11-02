@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
@@ -34,8 +35,8 @@ class MapAndOverlayTest {
         store.addCapture(id,byteArrayOf(1),JSONArray(),Location("test").apply { latitude=-1.28; longitude=36.82; accuracy=10f })
         store.finish(id)
         try {
-            compose.setContent { Column(Modifier.verticalScroll(rememberScrollState())) { HazardMapScreen(owner) } }
-            compose.waitUntil(15000) { compose.onAllNodes(hasText("1 located captures · latest 500 cloud reports")).fetchSemanticsNodes().isNotEmpty() }
+            compose.setContent { Column(Modifier.fillMaxSize()) { HazardMapScreen(owner) } }
+            compose.waitUntil(15000) { compose.onAllNodes(hasText("1 located captures")).fetchSemanticsNodes().isNotEmpty() }
             val markerCount=AtomicReference("null")
             compose.waitUntil(20000) {
                 compose.runOnIdle {

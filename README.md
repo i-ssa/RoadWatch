@@ -13,10 +13,14 @@ Connect an Android 8.0+ device with a rear camera, or use an emulator. An emulat
 1. Sign in once online. The saved account can reopen offline.
 2. Set up the mounted phone while parked; start a scan and allow camera access.
 3. Optionally enable location. Only a fix received during the scan, at most 30 seconds old and with reported accuracy within 100 m, is attached to a capture. Approximate permission may not provide that accuracy. No fix means no coordinates, including indoors or with GPS disabled.
-4. Stop to save a draft. Leaving the app also stops scanning. Interrupted scans recover as drafts.
+4. Tap Stop & review to save a draft. Leaving the app also stops scanning. Interrupted scans recover as drafts.
 5. In Detections, review orange boxes, confidence and location. Remove incorrect captures, then submit the remaining report. Submitted reports cannot be edited during sync.
 6. Reports retry automatically when connected. Synced reports can be removed locally to free space; this does not delete the cloud copy. Draft deletion removes the local draft and its images.
 7. The map shows only this account's saved and cloud locations. Refresh loads the latest 500 cloud reports. Cloud data is cached privately per account. Basemap tiles require internet; capture review remains available offline.
+
+## Map and scanner layout
+
+Version 1.1 uses full-screen map and camera views with floating, labelled controls and a compact action panel. The map opens outside the dashboard header and tabs. Zoom, refresh, fit-to-captures, scan, reports and back controls remain available. Scanner details are in the information dialog; location and available torch controls float beside the camera. Portrait and landscape use different panel widths, and system-bar icon contrast follows the screen background.
 
 ## Build and checks
 

@@ -30,8 +30,8 @@ android {
         }
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         buildConfigField("String", "SUPABASE_URL", authConfig("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", authConfig("SUPABASE_PUBLISHABLE_KEY"))
 
