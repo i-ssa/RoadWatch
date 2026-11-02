@@ -19,6 +19,15 @@ fun RoadWatchApp(auth: AuthViewModel) {
     val state by auth.state.collectAsState()
     var showAuth by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.signedIn) { if (state.signedIn) showAuth = true }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(state.userId) {
+        state.userId?.let { owner ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.example.roadwatch.data.reports.ReportStore.get(context).recoverOncePerProcess(owner)
+                com.example.roadwatch.data.reports.ReportSyncWorker.schedule(context, owner)
+            }
+        }
+    }
     BackHandler(state.loading || state.recovering) { /* Finish the request or explicitly cancel recovery. */ }
     when {
         state.restoring -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -31,7 +40,7 @@ fun RoadWatchApp(auth: AuthViewModel) {
         state.signedIn -> Column(Modifier.fillMaxSize()) {
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Box(Modifier.weight(1f)) {
-                DashboardScreen(onBack = auth::signOut, isSigningOut = state.loading)
+                DashboardScreen(onBack = auth::signOut, isSigningOut = state.loading, owner = state.userId)
             }
         }
         showAuth || state.recovering || state.error != null -> RoadWatchAuthFlow(

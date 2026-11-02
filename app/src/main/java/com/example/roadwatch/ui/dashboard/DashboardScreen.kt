@@ -40,7 +40,7 @@ import kotlinx.coroutines.delay
 
 /** Native UI backed by local demonstration data. Authentication remains owned by the host. */
 @Composable
-fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
+fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: String? = null) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("roadwatch_ui", Context.MODE_PRIVATE) }
     var appearance by rememberSaveable { mutableStateOf(preferences.getString("appearance", "system") ?: "system") }
@@ -63,12 +63,16 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
         if (scanning) { pendingRoute = next; dialog = "stop" } else route = next
     }
     LaunchedEffect(scanning) {
-        if (scanning) { delay(2500); captured = true }
+        if (scanning && owner == null) { delay(2500); captured = true }
     }
     BackHandler(enabled = onboarding || route != "Home" || scanning) {
         if (onboarding) { if (step > 0) step-- else completeIntro() }
         else if (scanning) { pendingRoute = "Detections"; dialog = "stop" }
         else route = "Home"
+    }
+    if (route == "Scan" && owner != null) {
+        com.example.roadwatch.ui.scan.ScanScreen(owner) { scanning = false; route = "Detections" }
+        return
     }
     MaterialTheme(colorScheme = colors, typography = PreviewTypography) {
         Scaffold(containerColor = colors.background, topBar = {
@@ -124,8 +128,8 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
                         "Review captured defects before preparing a report.")[step])
                     Spacer(Modifier.height(48.dp))
                     Body(listOf("Set up while safely parked. Let a passenger handle changes during a journey.",
-                        "This version uses sample scans. No camera or location access is requested.",
-                        "Check the suggested details and location. Nothing is submitted automatically.")[step])
+                        "Camera scans run on your phone, even without internet. Allow camera access to begin.",
+                        "Scan reports save on your device and sync to your account when internet returns.")[step])
                     Spacer(Modifier.height(24.dp))
                     Action(if (step == 2) "Open RoadWatch" else "Next") { if (step == 2) completeIntro() else step++ }
                     if (step > 0) TextButton(onClick = { step-- }) { Text("Back") }
@@ -136,7 +140,10 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
                         Spacer(Modifier.height(24.dp)); Action("Start scan") { dialog = "setup" }
                         Spacer(Modifier.height(32.dp)); Text("Recent activity", style = MaterialTheme.typography.titleMedium)
                         HorizontalDivider(Modifier.padding(vertical = 20.dp))
-                        if (captured) {
+                        if (owner != null) {
+                            Body("Your reports are saved on this device, including while offline.")
+                            TextButton(onClick = { route = "Detections" }) { Text("View saved reports") }
+                        } else if (captured) {
                             SectionTitle("1 sample detection")
                             Body("You’ve finished your sample scan. Take a look at what was captured.")
                             TextButton(onClick = { route = "Detections" }) { Text("Review detection") }
@@ -151,7 +158,9 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
                     }
                     "Detections" -> {
                         Heading("Detections"); Body("Let’s check what was spotted. You decide what goes into a report.")
-                        if (captured) {
+                        if (owner != null) {
+                            com.example.roadwatch.ui.scan.ReportsScreen(owner)
+                        } else if (captured) {
                             SampleRoad(true); Text("Possible pothole", style = MaterialTheme.typography.titleLarge)
                             Caption("Sample route · location not confirmed\nSeverity not assessed")
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -190,22 +199,22 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
                         TextButton(onClick = { dialog = "signout" }, enabled = !isSigningOut) { Text(if (isSigningOut) "Signing out…" else "Sign out") }
                     }
                 }
-                Spacer(Modifier.height(24.dp)); Caption("Development preview · sample scanning and reporting")
+                Spacer(Modifier.height(24.dp)); Caption(if (owner != null) "On-device detection · offline reports" else "Development preview · sample scanning and reporting")
             }
             }
         }
         dialog?.let { kind ->
             val title = when(kind) { "setup" -> "Before we head out"; "stop" -> "End this sample scan?"; "report" -> "Prepare your report"; "signout" -> "Sign out?"; "inspect" -> "Check before including"; "privacy" -> "Privacy & permissions"; "notifications" -> "Notifications"; "draft" -> "Sample draft prepared"; "about" -> "RoadWatch AI"; else -> "Let’s get you started" }
             val body = when(kind) {
-                "setup" -> "Secure your phone while parked. This sample does not access your camera or location. Real scanning is not connected yet."
+                "setup" -> if (owner != null) "Secure your phone while parked. Allow camera access to scan for possible potholes. Reports and captures are saved on this device and uploaded to your account when connected. Location is not recorded yet." else "Sample scanning only."
                 "stop" -> "Stop scanning before moving to another screen. You can review any sample capture afterwards."
                 "report" -> "Possible pothole · sample location unconfirmed. No recipient is configured. This version can prepare a sample draft but cannot send a report."
                 "draft" -> "Your sample draft is ready for review in this session. Nothing has been sent."
                 "signout" -> "You can sign in again whenever you’re ready."
                 "inspect" -> "This is an illustrated sample. No real defect, depth, or severity has been measured."
-                "privacy" -> "No camera or location permissions are requested by this dashboard. Appearance and onboarding choices stay on this device. Your account is managed by the existing authentication service."
+                "privacy" -> "Camera access is used only while scanning. Captured road images and reports are stored privately on this device and synced to your account. Location is not recorded. Sign out stops this account from uploading until you sign in again."
                 "notifications" -> "Report updates and hazard alerts are not connected yet."
-                "about" -> "Smarter roads. Safer journeys. Native Android interface with sample scan data."
+                "about" -> "RoadWatch AI · YOLO11s cleaned-v3 pothole detection on your device. Model suggestions need review."
                 else -> "Start a sample scan, review your captures, then choose what to include in a report. Replay the introduction from Profile."
             }
             AlertDialog(onDismissRequest = { dialog = null }, shape = RoundedCornerShape(16.dp), containerColor = colors.background, tonalElevation = 0.dp, title = { Text(title, Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }, text = { Text(body, textAlign = TextAlign.Center) },
@@ -217,7 +226,7 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false) {
                         "report" -> dialog = "draft"
                         "signout" -> onBack()
                     }
-                }) { Text(when(kind) { "setup" -> "Try sample scan"; "stop" -> "Stop scan"; "report" -> "Prepare sample draft"; "signout" -> "Sign out"; else -> "Got it" }) } },
+                }) { Text(when(kind) { "setup" -> if (owner != null) "Start camera scan" else "Try sample scan"; "stop" -> "Stop scan"; "report" -> "Prepare sample draft"; "signout" -> "Sign out"; else -> "Got it" }) } },
                 dismissButton = { if (kind in listOf("setup", "stop", "report", "signout")) TextButton(onClick = { dialog = null }) { Text("Cancel") } })
         }
     }
