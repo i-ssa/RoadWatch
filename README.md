@@ -18,9 +18,25 @@ Connect an Android 8.0+ device with a rear camera, or use an emulator. An emulat
 6. Reports retry automatically when connected. Synced reports can be removed locally to free space; this does not delete the cloud copy. Draft deletion removes the local draft and its images.
 7. The map shows only this account's saved and cloud locations. Refresh loads the latest 500 cloud reports. Cloud data is cached privately per account. Basemap tiles require internet; capture review remains available offline.
 
+## Linux emulator startup
+
+On the development machine, Emulator 37.1.11's headless auto mode selected SwiftShader and crashed with SIGSEGV inside its GLES renderer. Host rendering uses the AMD driver and has completed a cold boot successfully. KVM was available; AVD data did not need to be wiped.
+
+The original local AVD configuration now uses `hw.gpu.mode=host`; its previous configuration was backed up beside `config.ini`. That device’s 6 GB data partition had under 500 MB free and could not stage an app update, even after Android cache cleanup. A separate `RoadWatch_API_36` device was created with 12 GB storage, host graphics, four virtual CPUs, and a 720 × 1600 display at 280 dpi to reduce overhead while preserving the original logical screen dimensions. The original device and its data were retained. Prefer running one emulator at a time on this development machine. To explicitly select the working renderer from the CLI:
+
+```sh
+bash scripts/run_emulator.sh RoadWatch_API_36
+# For automated tests without a separate window:
+bash scripts/run_emulator.sh RoadWatch_API_36 -no-window -no-audio -no-snapshot
+```
+
+The helper defaults to host graphics; `ROADWATCH_EMULATOR_GPU` can override it on other machines. If the AVD is already open, use that instance or close it normally before launching another one. No system security settings are changed.
+
 ## Map and scanner layout
 
 Version 1.1 uses full-screen map and camera views with floating, labelled controls and a compact action panel. The map opens outside the dashboard header and tabs. Zoom, refresh, fit-to-captures, scan, reports and back controls remain available. Scanner details are in the information dialog; location and available torch controls float beside the camera. Portrait and landscape use different panel widths, and system-bar icon contrast follows the screen background.
+
+Version 1.1.1 also loads the map only after its native WebView has been measured, explicitly fills the viewport, and adds a regression check against zero-height maps.
 
 ## Build and checks
 

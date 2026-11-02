@@ -23,6 +23,12 @@ class CameraScanTest {
         try {
             compose.setContent { ScanScreen(owner) { finished=true } }
             compose.waitUntil(timeoutMillis=45000) { store.reports(owner).isNotEmpty() }
+            compose.waitUntil(timeoutMillis=45000) {
+                compose.onAllNodes(androidx.compose.ui.test.hasText("Looking for possible potholes") or androidx.compose.ui.test.hasText("Possible potholes saved for review")).fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.waitForIdle()
+            val screenshot=instrumentation.uiAutomation.takeScreenshot()
+            java.io.File(context.getExternalFilesDir(null),"qa-scan.png").outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
             compose.onNodeWithText("Stop & review").performClick()
             compose.waitUntil(timeoutMillis=15000) { finished }
             assertEquals("draft",store.reports(owner).single().status)

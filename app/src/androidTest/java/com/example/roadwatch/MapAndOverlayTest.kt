@@ -15,7 +15,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.roadwatch.data.reports.ReportStore
-import com.example.roadwatch.ui.map.HazardMapScreen
+import com.example.roadwatch.ui.dashboard.DashboardScreen
 import com.example.roadwatch.ui.scan.CaptureImage
 import org.json.JSONArray
 import org.junit.Assert.*
@@ -35,7 +35,9 @@ class MapAndOverlayTest {
         store.addCapture(id,byteArrayOf(1),JSONArray(),Location("test").apply { latitude=-1.28; longitude=36.82; accuracy=10f })
         store.finish(id)
         try {
-            compose.setContent { Column(Modifier.fillMaxSize()) { HazardMapScreen(owner) } }
+            context.getSharedPreferences("roadwatch_ui",0).edit().putBoolean("intro_v1",true).commit()
+            compose.setContent { DashboardScreen(onBack={},owner=owner) }
+            compose.onNode(hasText("Map") and hasClickAction()).performClick()
             compose.waitUntil(15000) { compose.onAllNodes(hasText("1 located captures")).fetchSemanticsNodes().isNotEmpty() }
             val markerCount=AtomicReference("null")
             compose.waitUntil(20000) {
@@ -45,14 +47,31 @@ class MapAndOverlayTest {
                 markerCount.get()=="1"
             }
             assertEquals("1",markerCount.get())
+            compose.runOnIdle { findWebView(compose.activity.window.decorView)?.let { println("NATIVE_MAP=${it.width}x${it.height}") } }
+            val viewport=AtomicReference("null")
+            try { compose.waitUntil(15000) {
+                compose.runOnIdle {
+                    findWebView(compose.activity.window.decorView)?.let { web ->
+                        web.evaluateJavascript("JSON.stringify({height:document.getElementById('map').getBoundingClientRect().height,viewport:innerHeight,tiles:document.querySelectorAll('.leaflet-tile-loaded').length})") { viewport.set(it) }
+                    }
+                }
+                val decoded=runCatching { org.json.JSONTokener(viewport.get()).nextValue() as? String }.getOrNull()
+                decoded!=null && runCatching { org.json.JSONObject(decoded).getDouble("height")>300 }.getOrDefault(false)
+            }
+            } finally { println("MAP_RENDER="+viewport.get()) }
+            // Wait for tiles only for visual QA; lack of internet must not fail offline marker checks.
+            val tilesReady=AtomicReference("false")
+            try { compose.waitUntil(10000) {
+                compose.runOnIdle {
+                    findWebView(compose.activity.window.decorView)?.evaluateJavascript("document.querySelectorAll('.leaflet-tile').length>0 && Array.from(document.querySelectorAll('.leaflet-tile')).every(image=>image.complete && image.naturalWidth>0)") { tilesReady.set(it) }
+                }
+                tilesReady.get()=="true"
+            } } catch(_: ComposeTimeoutException) { /* Offline or delayed basemap. */ }
             val painted=java.util.concurrent.atomic.AtomicBoolean(false)
             compose.runOnIdle {
-                findWebView(compose.activity.window.decorView)?.let { web ->
-                    web.evaluateJavascript("JSON.stringify({size:map.getSize(),rect:document.getElementById('map').getBoundingClientRect().toJSON(),tiles:document.querySelectorAll('.leaflet-tile-loaded').length})") { println("MAP_RENDER=$it") }
-                    web.postVisualStateCallback(1,object:WebView.VisualStateCallback() {
-                        override fun onComplete(id: Long) { painted.set(true) }
-                    })
-                }
+                findWebView(compose.activity.window.decorView)?.postVisualStateCallback(1,object:WebView.VisualStateCallback() {
+                    override fun onComplete(id: Long) { painted.set(true) }
+                })
             }
             compose.waitUntil(10000) { painted.get() }
             saveScreenshot("qa-map.png")

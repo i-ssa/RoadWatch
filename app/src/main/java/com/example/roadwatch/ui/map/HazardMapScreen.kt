@@ -2,6 +2,8 @@ package com.example.roadwatch.ui.map
 
 import android.annotation.SuppressLint
 import android.webkit.*
+import android.view.ViewGroup
+import androidx.core.view.doOnLayout
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +76,7 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
         val compact=maxHeight<500.dp
     AndroidView(modifier=Modifier.fillMaxSize(),factory={
         WebView(it).apply {
+            layoutParams=ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT)
             browser=this
             settings.javaScriptEnabled=true
             settings.allowFileAccess=false
@@ -81,7 +84,7 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
             settings.mixedContentMode=WebSettings.MIXED_CONTENT_NEVER_ALLOW
             settings.userAgentString="RoadWatch/1.0 (+https://github.com/i-ssa/RoadWatch)"
             webViewClient=object: WebViewClient() {
-                override fun onPageFinished(view: WebView, url: String) { ready=true }
+                override fun onPageFinished(view: WebView, url: String) { ready=true; view.evaluateJavascript("map.invalidateSize()",null) }
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest)=true
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                     return if(request.url.scheme=="https" && request.url.host=="tile.openstreetmap.org") null
@@ -91,7 +94,7 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
             setOnTouchListener { view,_ -> view.parent.requestDisallowInterceptTouchEvent(true); false }
             val css=context.assets.open("map/leaflet.css").bufferedReader().use { reader -> reader.readText() }
             val js=context.assets.open("map/leaflet.js").bufferedReader().use { reader -> reader.readText() }
-            loadDataWithBaseURL("https://roadwatch.local/",mapHtml(css,js),"text/html","UTF-8",null)
+            doOnLayout { loadDataWithBaseURL("https://roadwatch.local/",mapHtml(css,js),"text/html","UTF-8",null) }
         }
     })
         Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
@@ -140,7 +143,7 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
 private fun mapHtml(css: String, js: String)="""
 <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https://tile.openstreetmap.org data:;">
-<style>$css html,body,#map{height:100%;margin:0}#status{position:absolute;top:112px;left:20px;background:#fff;padding:0 10px;border-radius:20px;z-index:1000;font:12px/32px sans-serif;max-width:65%} .leaflet-container{background:#e9eee9} .leaflet-popup-content-wrapper{border-radius:16px}</style>
+<style>$css html,body{height:100%;width:100%;margin:0;overflow:hidden}#map{position:fixed;inset:0;width:100vw;height:100vh}#status{position:absolute;top:112px;left:20px;background:#fff;padding:0 10px;border-radius:20px;z-index:1000;font:12px/32px sans-serif;max-width:65%} .leaflet-container{background:#e9eee9} .leaflet-popup-content-wrapper{border-radius:16px}</style>
 </head><body><div id="map" role="img" aria-label="Map of your possible pothole captures"></div><div id="status"></div><script>$js</script><script>
 const map=L.map('map',{zoomControl:false,attributionControl:false}).setView([0,0],2), markers=L.layerGroup().addTo(map);let centered=false;let captureBounds=[];
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).on('tileerror',()=>{document.getElementById('status').textContent='Map tiles unavailable · saved markers shown'}).addTo(map);

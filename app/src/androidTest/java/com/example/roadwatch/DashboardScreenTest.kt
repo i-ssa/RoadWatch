@@ -43,6 +43,10 @@ class DashboardScreenTest {
         assertEquals(root.height,map.height,1f)
         assertEquals(root.width,map.width,1f)
         compose.onNodeWithContentDescription("RoadWatch AI").assertDoesNotExist()
+        compose.waitForIdle()
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        val screenshot=instrumentation.uiAutomation.takeScreenshot()
+        java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"qa-map-dashboard.png").outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         compose.onNodeWithContentDescription("Back to Home").performClick()
         compose.onNodeWithText("Welcome to RoadWatch.").assertIsDisplayed()
     }
