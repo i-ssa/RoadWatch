@@ -6,10 +6,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.roadwatch.BuildConfig
-import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.annotations.SupabaseExperimental
 import io.github.jan.supabase.auth.event.AuthEvent
-import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -22,12 +20,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 data class AuthUiState(
     val restoring: Boolean = true,
     val signedIn: Boolean = false,
+    val userId: String? = null,
     val recovering: Boolean = false,
     val loading: Boolean = false,
     val resendSeconds: Int = 0,
@@ -40,11 +40,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = application.getSharedPreferences("auth_flow", 0)
     private val mutableState = MutableStateFlow(AuthUiState(recovering = preferences.getBoolean("recovering", false)))
     val state = mutableState.asStateFlow()
-    private val client = if (BuildConfig.SUPABASE_URL.startsWith("https://") && BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()) {
-        createSupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_PUBLISHABLE_KEY) {
-            install(Auth) { scheme = "roadwatch"; host = "auth" }
-        }
-    } else null
+    private val client = RoadWatchBackend.client
 
     init {
         if (client == null) mutableState.update { it.copy(restoring = false) }
@@ -57,14 +53,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             viewModelScope.launch {
+                RoadWatchBackend.restore()
+                mutableState.update { it.copy(restoring = false) }
                 client.auth.sessionStatus.collect { status ->
                     mutableState.update { old ->
                         when (status) {
                             SessionStatus.Initializing -> old.copy(restoring = true)
-                            is SessionStatus.Authenticated -> old.copy(restoring = false, signedIn = true)
-                            is SessionStatus.NotAuthenticated -> old.copy(restoring = false, signedIn = false)
-                            is SessionStatus.RefreshFailure -> old.copy(restoring = false, signedIn = false,
-                                error = "Unable to restore your session. Check your connection and sign in again.")
+                            is SessionStatus.Authenticated -> old.copy(restoring = false, signedIn = true, userId = status.session.user?.id)
+                            is SessionStatus.NotAuthenticated -> old.copy(restoring = false, signedIn = false, userId = null)
+                            is SessionStatus.RefreshFailure -> old.copy(restoring = false,
+                                message = "Your saved account is available offline. Reports will sync when connected.")
                         }
                     }
                 }
@@ -82,7 +80,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
         mutableState.update { it.copy(loading = true, error = null, message = null) }
         viewModelScope.launch {
-            try { block() }
+            try { RoadWatchBackend.sessionLock.withLock { block() } }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 // Never display raw response bodies, URLs, or session tokens.
@@ -156,16 +154,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updatePassword(password: String) = request {
         check(state.value.recovering && state.value.signedIn)
-        client!!.auth.updateUser { this.password = password }
+        client!!.auth.refreshCurrentSession()
+        client.auth.updateUser { this.password = password }
         client.auth.signOut()
         setRecovery(false)
         mutableState.update { it.copy(signedIn = false, message = "Password updated. Sign in with your new password.") }
     }
 
     fun signOut() = request {
-        client!!.auth.signOut()
+        // Clearing locally also works without internet; pending reports remain owned by this account.
+        client!!.auth.clearSession()
         setRecovery(false)
-        mutableState.update { it.copy(signedIn = false) }
+        mutableState.update { it.copy(signedIn = false, userId = null) }
     }
 
     private fun setRecovery(value: Boolean) {

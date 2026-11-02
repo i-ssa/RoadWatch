@@ -25,3 +25,38 @@ No custom public database tables or database permissions are required for authen
 After adding settings, rebuild and run the app. Create a test account, confirm its email, sign in, restart the app to check restoration, and sign out. Request a reset email, open it on the Android device, set a new password, and confirm that only the new password works. Check incorrect credentials, expired links, offline errors, and duplicate-tap prevention. This requires a configured Supabase project and real email delivery; compilation alone does not verify those paths.
 
 Reference: https://supabase.com/docs/reference/kotlin/initializing
+
+## Offline accounts, scans, and report sync
+
+The app restores the SDK's persisted session with auto-refresh disabled during startup, so loading the dashboard does not wait for internet or an expired token refresh. Passwords are never stored by the app. The background worker refreshes the token before uploading; a network failure leaves the saved account and local reports intact. Explicit sign-out clears the local session even offline. A revoked/invalid session may require signing in again. Reports remain on the device under their original account and are never uploaded by another account.
+
+Run `supabase/migrations/20261101_offline_reports.sql` in the Supabase SQL editor. This creates `road_reports`, a private `roadwatch-captures` bucket, and owner-only row/storage policies. The Android app uses only the public key plus the signed-in user's token. Do not put administrative credentials in the APK.
+
+Camera scanning uses the bundled cleaned-v3 YOLO11s ONNX model without a network. Start a scan while parked; allow camera access. The app analyzes at most one frame every two seconds and saves road images with possible potholes and normalized boxes to private files/SQLite. Stop the scan to queue the report, including scans with zero detections. Interrupted scans are recovered on the next launch. No location or severity is invented. Leaving the app stops and queues the current scan; background recording is not implemented.
+
+WorkManager retries uploads with a connected-network constraint and exponential backoff. Android controls exact scheduling, so sync is eventual rather than instantaneous. Stable UUID paths and database upserts make retries safe if the connection drops after a server write. Local data is retained after sync for offline review; there is no automatic retention cleanup yet. Detections are model suggestions and may contain missed/duplicate potholes across frames.
+
+### Model provenance and rebuilding
+
+The model comes from `i-ssa/SemProject_MLEngine`, using the checkpoint SHA-256 documented in its `docs/MODEL.md`. `app/src/main/assets/pothole-model.json` records the export's checksum and shape contract. To reproduce, install PyTorch, Ultralytics, ONNX, and ONNX Runtime in a Python environment, then run:
+
+```bash
+python scripts/export_android_model.py /path/to/verified/best.pt
+```
+
+### Acceptance checks
+
+1. Configure Supabase, apply the migration, sign in online, then force-stop and reopen in airplane mode: the dashboard should open under the same account.
+2. With airplane mode on, complete a camera scan and review its saved captures. Force-stop/reopen: the report remains pending.
+3. Restore internet and wait for WorkManager (or tap Retry sync); verify the row and private images belong to the same account and the report becomes Synced.
+4. Drop connectivity during upload and retry: one report row and stable image paths should remain.
+5. Sign out offline, sign in to a different account: the previous account's reports must remain hidden and must not upload. Sign back in to resume them.
+6. Test camera denial, unavailable camera, interrupted scan, expired access token, invalid refresh token, and database/storage policy errors on a real device. Emulator/unit tests do not establish phone performance or real Supabase delivery.
+
+### Automated verification
+
+Run `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:connectedDebugAndroidTest` with an emulator or device attached. Device tests cover restoring an expired session without a server connection, SQLite persistence and account isolation, interrupted-scan recovery, active scans surviving screen recreation, bundled ONNX inference, camera capture and report queueing, and dashboard navigation.
+
+`LiveAccountScanTest` is skipped by default because it uses the account already signed in on the device. For an explicit acceptance check, disable the emulator's Wi-Fi/mobile data and run `recordOfflineScan` with instrumentation argument `liveAccount=true`. Re-enable connectivity, then run `syncRecordedScan` with `liveAccount=true` and `reportId` set to the UUID printed by the first phase. It verifies the actual report row and every uploaded private image. This creates a real emulator test report in that account; its model suggestions are not verified road defects.
+
+On 2 November 2026, the debug build, two JVM tests, nine regular device tests, and both live acceptance phases passed. A force-stopped app reopened directly to the saved account's dashboard with emulator Wi-Fi and mobile data disabled. The offline emulator scan uploaded one report and one capture after reconnecting.
