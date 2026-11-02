@@ -12,15 +12,11 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import androidx.compose.material3.*
@@ -73,20 +69,12 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
         val compact=maxHeight<500.dp
         if(permission) AndroidView(factory={preview},modifier=Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.55f),Color.Transparent,Color.Transparent,Color.Black.copy(alpha=.6f)))))
-        if(permission) Canvas(Modifier.fillMaxSize().semantics { contentDescription="Camera viewfinder" }) {
-            val w=size.width;val h=size.height;val l=w*.12f;val r=w*.88f;val t=h*.28f;val b=h*.62f;val arm=26.dp.toPx()
-            val c=Color.White.copy(alpha=.55f);val stroke=2.dp.toPx()
-            for((x,y,sx,sy) in listOf(listOf(l,t,1f,1f),listOf(r,t,-1f,1f),listOf(l,b,1f,-1f),listOf(r,b,-1f,-1f))) {
-                drawLine(c,Offset(x,y),Offset(x+arm*sx,y),stroke)
-                drawLine(c,Offset(x,y),Offset(x,y+arm*sy),stroke)
-            }
-        }
         Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
             JourneyButton("End scan and review","back",{ if(!stopping) { if(stop!=null) { stopping=true;stop?.invoke() } else onFinished() } },enabled=!stopping,dark=true)
             JourneyPill(if(!permission) "ROAD SCAN" else if(stopping) "SAVING" else if(paused) "PAUSED" else "%02d:%02d · SCANNING".format(elapsed/60,elapsed%60),dark=true,indicator=if(paused) Color(0xFFFFC76F) else if(permission) Color(0xFFA9DFB8) else null)
             JourneyButton("Scan information","info",{showInfo=true},dark=true)
         }
-        if(permission) Column(Modifier.align(Alignment.CenterEnd).padding(end=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(permission) Column(Modifier.align(if(compact) Alignment.CenterEnd else Alignment.TopEnd).then(if(compact) Modifier.padding(end=20.dp) else Modifier.statusBarsPadding().padding(top=100.dp,end=20.dp)),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             JourneyButton(if(locationEnabled) "Capture location information" else "Enable capture location","locate",{if(locationEnabled) showInfo=true else locationRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))},dark=true)
             if(camera?.cameraInfo?.hasFlashUnit()==true) JourneyButton(if(torch) "Turn torch off" else "Turn torch on","flash",{torch=!torch;camera?.cameraControl?.enableTorch(torch)},dark=true,active=torch)
         }

@@ -99,10 +99,8 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
             JourneyPill("Your road map",dark=dark)
             JourneyButton("Map information","info",{showInfo=true},dark=dark)
         }
-        Column(Modifier.align(Alignment.CenterEnd).padding(end=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.align(if(compact) Alignment.CenterEnd else Alignment.TopEnd).then(if(compact) Modifier.padding(end=20.dp) else Modifier.statusBarsPadding().padding(top=100.dp,end=20.dp)),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             JourneyButton("Refresh cloud reports","refresh",{refresh()},enabled=!refreshing,dark=dark)
-            JourneyButton("Zoom in","plus",{mapAction("map.zoomIn()")},enabled=ready,dark=dark)
-            JourneyButton("Zoom out","minus",{mapAction("map.zoomOut()")},enabled=ready,dark=dark)
             JourneyButton("Show all captures","locate",{mapAction("fitCaptures()")},enabled=ready && count>0,dark=dark)
         }
         Surface(Modifier.align(if(compact) Alignment.BottomStart else Alignment.BottomCenter).navigationBarsPadding().padding(20.dp).widthIn(max=if(compact) 360.dp else 480.dp).fillMaxWidth(),shape=RoundedCornerShape(28.dp),color=MaterialTheme.colorScheme.surface.copy(alpha=.98f),contentColor=MaterialTheme.colorScheme.onSurface,shadowElevation=12.dp) {
@@ -129,7 +127,13 @@ fun HazardMapScreen(owner: String, onBack: () -> Unit = {}, onStartScan: () -> U
             }
         }
     }
-    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("Your hazard map")},text={Text("$message\n\nPossible potholes from your private account. Orange markers are drafts; blue markers are submitted. Locations are phone estimates, not verified defects. Refresh includes the latest 500 cloud reports. Map tiles need internet; saved reports remain available offline.")},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
+    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("Your hazard map")},text={Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        Text("$message\n\nPossible potholes from your private account. Orange markers are drafts; blue markers are submitted. Locations are phone estimates, not verified defects. Refresh includes the latest 500 cloud reports. Pinch the map to zoom; tiles need internet.")
+        Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(enabled=ready,onClick={mapAction("map.zoomOut()")}) { Text("Zoom out") }
+            OutlinedButton(enabled=ready,onClick={mapAction("map.zoomIn()")}) { Text("Zoom in") }
+        }
+    }},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
     DisposableEffect(owner) { onDispose { browser?.apply { stopLoading(); destroy() }; browser=null } }
 }
 
