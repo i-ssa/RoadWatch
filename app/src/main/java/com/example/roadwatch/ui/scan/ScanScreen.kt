@@ -71,7 +71,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=.55f),Color.Transparent,Color.Transparent,Color.Black.copy(alpha=.6f)))))
         Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
             JourneyButton("End scan and review","back",{ if(!stopping) { if(stop!=null) { stopping=true;stop?.invoke() } else onFinished() } },enabled=!stopping,dark=true)
-            JourneyPill(if(!permission) "ROAD SCAN" else if(stopping) "SAVING" else if(paused) "PAUSED" else "%02d:%02d · SCANNING".format(elapsed/60,elapsed%60),dark=true,indicator=if(paused) Color(0xFFFFC76F) else if(permission) Color(0xFFA9DFB8) else null)
+            JourneyPill(if(!permission) "Road scan" else if(stopping) "Saving…" else if(paused) "Paused" else "%02d:%02d · Scanning".format(elapsed/60,elapsed%60),dark=true,indicator=if(paused) Color(0xFFFFC76F) else if(permission) Color(0xFFA9DFB8) else null)
             JourneyButton("Scan information","info",{showInfo=true},dark=true)
         }
         if(permission) Column(Modifier.align(if(compact) Alignment.CenterEnd else Alignment.TopEnd).then(if(compact) Modifier.padding(end=20.dp) else Modifier.statusBarsPadding().padding(top=100.dp,end=20.dp)),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -83,12 +83,12 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                 if(permission) {
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(if(paused) "Scan paused" else "Watching the road",fontSize=20.sp,fontWeight=FontWeight.SemiBold)
+                            Text(if(paused) "Scan paused" else "Capturing road hazards",fontSize=20.sp,fontWeight=FontWeight.SemiBold)
                             Text(if(message.startsWith("Scanning paused") || message.startsWith("Camera unavailable")) message else if(count>0) "Possible potholes saved for review" else if(latency==0L) "Connecting camera…" else "Looking for possible potholes",fontSize=13.sp,color=Color(0xFFB9C8BD))
                         }
                         Column(horizontalAlignment=Alignment.End) {
                             Text("$count",fontSize=28.sp,fontWeight=FontWeight.SemiBold)
-                            Text("captures",fontSize=11.sp,color=Color(0xFFB9C8BD))
+                            Text(if(count==1) "capture" else "captures",fontSize=11.sp,color=Color(0xFFB9C8BD))
                         }
                     }
                     Button(onClick={stopping=true;stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDBF0DF),contentColor=Color(0xFF133721))) {
@@ -99,14 +99,14 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                         Text(if(locationEnabled) "Location enabled" else "Location off",fontSize=11.sp,color=Color(0xFFB9C8BD))
                     }
                 } else {
-                    Text("Your road. A clearer view.",fontSize=24.sp,fontWeight=FontWeight.SemiBold)
+                    Text("Camera access needed",fontSize=24.sp,fontWeight=FontWeight.SemiBold)
                     Text("Allow the camera to scan for possible potholes. Set up your phone while parked.",color=Color(0xFFB9C8BD))
                     Button(onClick={request.launch(Manifest.permission.CAMERA)},modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDBF0DF),contentColor=Color(0xFF133721))) { Text("Allow camera") }
                 }
             }
         }
     }
-    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Scanning runs on this phone. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
+    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Mount your phone while parked. Scans work offline and save as private drafts. Check captures before submitting. Enable location if you want to attach it to new captures.")},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
     if(permission) DisposableEffect(owner,lifecycle) {
         val executor = Executors.newSingleThreadExecutor()
         val active = AtomicBoolean(true)

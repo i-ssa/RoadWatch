@@ -3,11 +3,13 @@ package com.example.roadwatch.ui.scan
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.roadwatch.data.reports.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -15,11 +17,11 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-fun ReportsScreen(owner: String) {
+fun ReportsScreen(owner: String, onStartScan: (() -> Unit)? = null) {
     val context=LocalContext.current
     val scope=rememberCoroutineScope()
     val store=remember { ReportStore.get(context) }
-    var reports by remember(owner) { mutableStateOf(emptyList<ScanReport>()) }
+    var reports by remember(owner) { mutableStateOf<List<ScanReport>?>(null) }
     var selected by remember(owner) { mutableStateOf<String?>(null) }
     var deleting by remember(owner) { mutableStateOf<ScanReport?>(null) }
     var feedback by remember(owner) { mutableStateOf<String?>(null) }
@@ -33,7 +35,8 @@ fun ReportsScreen(owner: String) {
                 withContext(Dispatchers.IO) { action() }
                 reports=withContext(Dispatchers.IO) { store.reports(owner) }
                 revision++
-            } catch(_: Exception) { feedback="Couldn't update this report. Please try again." }
+            } catch (e: CancellationException) { throw e }
+            catch(_: Exception) { feedback="Couldn't update this report. Please try again." }
             finally { busy=false }
         }
     }
@@ -41,38 +44,70 @@ fun ReportsScreen(owner: String) {
         withContext(Dispatchers.IO) { ReportSyncWorker.schedule(context,owner) }
         while(true) { reports=withContext(Dispatchers.IO) { store.reports(owner) }; delay(2000) }
     }
-    Text("Saved reports",style=MaterialTheme.typography.headlineSmall)
-    Text("Drafts stay on this device until you review and submit them. Remove incorrect captures before submitting.")
-    TextButton(onClick={ReportSyncWorker.schedule(context,owner)}) { Text("Retry sync") }
-    feedback?.let { Text(it,color=MaterialTheme.colorScheme.error) }
-    if(reports.isEmpty()) Text("No scans yet. Start a scan from Home.")
-    reports.forEach { report -> key(report.id) {
-        Card(Modifier.fillMaxWidth().padding(vertical=8.dp)) {
-            Column(Modifier.padding(16.dp)) {
-                Text(DateFormat.getDateTimeInstance().format(Date(report.started)))
-                Text("${report.detections} captures · "+when(report.status) { "synced" -> "Synced"; "recording" -> "Scan in progress"; "draft" -> "Draft · review before submitting"; else -> "Saved on device · waiting to sync" })
-                report.syncError?.let { Text(it, color=MaterialTheme.colorScheme.error) }
-                TextButton(onClick={selected=if(selected==report.id) null else report.id}) { Text("Review captures") }
-                if(selected==report.id) {
-                    CaptureList(store,report.id,revision,editable=report.status=="draft" && !busy) { capture ->
-                        change { check(store.removeCapture(capture.id,report.id,owner)) }
-                    }
-                    if(report.status=="draft") {
-                        Text("Submitting uploads this report and its remaining captures to your account when connected. Submitted reports cannot be edited here.")
-                        Button(enabled=!busy,onClick={change {
-                            check(store.submit(report.id,owner))
-                            ReportSyncWorker.schedule(context,owner)
-                        }}) { Text("Submit report") }
-                    }
-                }
-                if(report.status in listOf("draft","synced")) {
-                    TextButton(enabled=!busy,onClick={deleting=report}) {
-                        Text(if(report.status=="synced") "Remove from this device" else "Delete draft")
-                    }
+    feedback?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    when (val saved = reports) {
+        null -> LinearProgressIndicator(Modifier.fillMaxWidth())
+        else -> if (saved.isEmpty()) {
+            Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    JourneyGlyph("report", MaterialTheme.colorScheme.primary)
+                    Text("No reports yet", style = MaterialTheme.typography.titleLarge)
+                    Text("Scans appear here as drafts for you to review.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    onStartScan?.let { Button(onClick = it, shape = MaterialTheme.shapes.medium) { Text("Start scan") } }
                 }
             }
+        } else {
+            if (saved.any { it.status == "pending" }) {
+                OutlinedButton(onClick = { ReportSyncWorker.schedule(context, owner) }) { Text("Retry sync") }
+            }
+            saved.forEach { report -> key(report.id) {
+                val expanded = selected == report.id
+                Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(report.started)),
+                            style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val status = when (report.status) {
+                                "draft" -> "Draft"
+                                "synced" -> "Submitted"
+                                "recording" -> "Scanning"
+                                else -> "Waiting to sync"
+                            }
+                            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Text(status, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+                            }
+                            Text(if (report.detections == 1) "1 capture" else "${report.detections} captures",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        report.syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        OutlinedButton(onClick = { selected = if (expanded) null else report.id },
+                            shape = MaterialTheme.shapes.medium) {
+                            Text(if (expanded) "Hide captures" else "Review captures")
+                        }
+                        if (expanded) {
+                            HorizontalDivider()
+                            CaptureList(store, report.id, revision, editable = report.status == "draft" && !busy) { capture ->
+                                change { check(store.removeCapture(capture.id, report.id, owner)) }
+                            }
+                            if (report.status == "draft") {
+                                Text("Submitting shares hazard locations with signed-in users. Your photos stay private.",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                                Button(enabled = !busy, onClick = { change {
+                                    check(store.submit(report.id, owner))
+                                    ReportSyncWorker.schedule(context, owner)
+                                } }, shape = MaterialTheme.shapes.medium) { Text("Submit report") }
+                            }
+                            if (report.status == "draft" || report.status == "synced") {
+                                TextButton(enabled = !busy, onClick = { deleting = report }) {
+                                    Text(if (report.status == "synced") "Remove from this device" else "Delete draft")
+                                }
+                            }
+                        }
+                    }
+                }
+            } }
         }
-    } }
+    }
     deleting?.let { report ->
         AlertDialog(onDismissRequest={deleting=null},title={Text(if(report.status=="draft") "Delete draft?" else "Remove local copy?")},
             text={Text(if(report.status=="draft") "This permanently removes the draft and its images from this device." else "This frees space on this device. The submitted report and images remain in your cloud account.")},

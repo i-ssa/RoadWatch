@@ -21,10 +21,13 @@ class ReportStore internal constructor(private val context: Context, databaseNam
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Legacy pending reports were queued without review. Require approval after upgrading.
         if (oldVersion < 3) {
-            db.execSQL("ALTER TABLE captures ADD COLUMN latitude REAL")
-            db.execSQL("ALTER TABLE captures ADD COLUMN longitude REAL")
-            db.execSQL("ALTER TABLE captures ADD COLUMN accuracy REAL")
-            db.execSQL("ALTER TABLE captures ADD COLUMN captured_at INTEGER NOT NULL DEFAULT 0")
+            val columns=db.rawQuery("PRAGMA table_info(captures)",null).use { cursor ->
+                buildSet { while(cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+            }
+            mapOf("latitude" to "REAL", "longitude" to "REAL", "accuracy" to "REAL",
+                "captured_at" to "INTEGER NOT NULL DEFAULT 0").forEach { (name,type) ->
+                if(name !in columns) db.execSQL("ALTER TABLE captures ADD COLUMN $name $type")
+            }
         }
         if (oldVersion < 2) db.execSQL("UPDATE reports SET status='draft', sync_error=NULL WHERE status='pending'")
     }
@@ -51,7 +54,12 @@ class ReportStore internal constructor(private val context: Context, databaseNam
     fun recoverInterrupted(owner: String) {
         writableDatabase.execSQL("UPDATE reports SET status='draft' WHERE owner=? AND status='recording'", arrayOf(owner))
     }
-    fun markSynced(id: String) { writableDatabase.execSQL("UPDATE reports SET status='synced', sync_error=NULL WHERE id=?", arrayOf(id)) }
+    fun markSynced(id: String, owner: String) {
+        writableDatabase.execSQL("UPDATE reports SET status='synced', sync_error=NULL WHERE id=? AND owner=? AND status='pending'", arrayOf(id,owner))
+    }
+    fun syncError(id: String, owner: String, message: String) {
+        writableDatabase.execSQL("UPDATE reports SET sync_error=? WHERE id=? AND owner=? AND status='pending'", arrayOf(message,id,owner))
+    }
     fun syncError(owner: String, message: String) {
         writableDatabase.execSQL("UPDATE reports SET sync_error=? WHERE owner=? AND status='pending'", arrayOf(message,owner))
     }

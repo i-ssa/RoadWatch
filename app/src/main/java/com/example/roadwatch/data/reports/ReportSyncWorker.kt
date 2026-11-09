@@ -7,13 +7,12 @@ import com.example.roadwatch.data.auth.RoadWatchBackend
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.request.*
 import io.ktor.http.*
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ReportSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -50,34 +49,20 @@ class ReportSyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 checkAccount()
                 if (response.status.value !in 200..299) throw SyncFailure(response.status.value)
             }
-            for (report in store.reports(owner).filter { it.status == "pending" }) {
-                val captures = JSONArray()
-                for (capture in store.captures(report.id)) {
-                    val remotePath = "$owner/${report.id}/${capture.id}.jpg"
-                    send("storage/v1/object/roadwatch-captures/$remotePath", File(capture.path).readBytes(), ContentType.Image.JPEG, true)
-                    captures.put(JSONObject().put("id",capture.id).put("image_path",remotePath).put("boxes",JSONArray(capture.boxes)).put("latitude",capture.latitude ?: JSONObject.NULL).put("longitude",capture.longitude ?: JSONObject.NULL).put("accuracy_m",capture.accuracy ?: JSONObject.NULL).put("captured_at_ms",capture.capturedAt))
-                }
-                // Stable UUID + upsert makes a retry after a lost response safe.
-                val payload = JSONObject().put("id",report.id).put("user_id",owner)
-                    .put("started_at_ms",report.started).put("captures",captures).put("model_version","cleaned-v3-yolo11s")
-                send("rest/v1/road_reports?on_conflict=id", payload.toString(), ContentType.Application.Json)
-                store.markSynced(report.id)
-            }
-            Result.success()
+            val engine=ReportSyncEngine(store,::checkAccount,
+                uploadCapture={ path,bytes -> send("storage/v1/object/roadwatch-captures/$path",bytes,ContentType.Image.JPEG,true) },
+                uploadReport={ payload -> send("rest/v1/road_reports?on_conflict=id",payload,ContentType.Application.Json) })
+            if(engine.sync(owner)) Result.success() else Result.retry()
         } catch(e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
             store.syncError(owner,"Sign-in refresh timed out. Your report is saved and will retry.")
             Result.retry()
         } catch(e: CancellationException) { throw e }
         catch(e: Exception) {
-            store.syncError(owner, when {
-                e is SyncFailure && e.code in listOf(401,403) -> "Cloud access was denied. Check your sign-in and project permissions."
-                e is SyncFailure && e.code in listOf(400,404) -> "Cloud storage needs setup. Your report is safe on this device."
-                else -> "Sync could not finish. Your report is saved and will retry automatically."
-            })
+            store.syncError(owner,syncFailureMessage(e))
             Result.retry()
         } // Keep all local data until confirmed by the server.
     }
-    private class SyncFailure(val code: Int) : Exception()
     companion object {
         fun cancel(context: Context, owner: String) {
             WorkManager.getInstance(context).apply {

@@ -17,6 +17,8 @@ fun authConfig(name: String): String = "\"" +
     (authProperties.getProperty(name) ?: System.getenv(name).orEmpty())
         .replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+val mapsApiKey = (authProperties.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY").orEmpty()).trim()
+
 android {
     namespace = "com.example.roadwatch"
     compileSdk {
@@ -30,10 +32,13 @@ android {
         }
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 9
+        versionName = "1.2.3"
         buildConfigField("String", "SUPABASE_URL", authConfig("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", authConfig("SUPABASE_PUBLISHABLE_KEY"))
+
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("boolean", "MAPS_CONFIGURED", mapsApiKey.isNotBlank().toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -66,7 +71,16 @@ android {
     }
 }
 
+// Prevent distributing a release whose Google basemap cannot authenticate.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    val keyConfigured = mapsApiKey.isNotBlank()
+    doFirst { check(keyConfigured) {
+        "Google Maps setup required: add MAPS_API_KEY to local.properties (see GOOGLE_MAPS_SETUP.md)."
+    } }
+}
+
 dependencies {
+    implementation("com.google.maps.android:maps-compose:6.12.0")
     implementation(platform("io.github.jan-tennert.supabase:bom:3.2.6"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.ktor:ktor-client-okhttp:3.3.1")

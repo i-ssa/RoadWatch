@@ -50,12 +50,26 @@ The default APK contains ARM64, ARMv7, x86 and x86_64 libraries. Native librarie
 
 ## Boundaries
 
-Boxes are model suggestions, not verified defects. The app does not estimate pothole depth or severity, count unique defects across frames, send reports to a road authority, or record in the background. The map is private to the account, not a public community feed. Public reporting, hazard alerts, moderation and notifications need separate product/backend decisions. Camera frames without detections are not retained.
+Boxes are model suggestions, not verified defects. The app does not estimate pothole depth or severity, count unique defects across frames, send reports to a road authority, or record in the background. Submitted hazard coordinates are shared with signed-in users; drafts, original reports and photos stay private. Hazard alerts, moderation and notifications need separate product/backend decisions. Camera frames without detections are not retained.
 
 To create a release signing key on a new machine, run `python3 scripts/create_signing_key.py` once. It refuses to overwrite existing credentials. If `.signing/` already exists, preserve its key. Back up that directory privately before relying on release upgrades. Then run `./gradlew :app:assembleRelease`; Gradle reads `.signing/release.properties`. Without those credentials, release output is unsigned. Never commit or upload the signing directory as a public artifact.
 
 A Drive APK is a direct distribution, not a Play Store listing. Keep signing credentials private and preserve the signing key for future upgrades. A different certificate cannot update an already-installed build with the same application ID.
 
-## Map license
+## Native Google Maps
 
-Leaflet 1.9.4 is bundled with its BSD license in `app/src/main/assets/map/LICENSE`. Map data is © OpenStreetMap contributors. Tile loading follows the [OSM tile policy](https://operations.osmfoundation.org/policies/tiles/); no bulk/offline tile downloads are provided. See https://leafletjs.com/ for library documentation.
+Version 1.2.0 replaces the web map with Maps SDK for Android and Maps Compose. See [GOOGLE_MAPS_SETUP.md](GOOGLE_MAPS_SETUP.md) to enable the SDK, restrict the API key to RoadWatch's package/signing certificates, and configure the local build.
+
+No map ID is set. This build does not call Places, Routes, Street View or the Map Tiles API. The app and SDK request English, although Google may retain local-language place names alongside English. Private draft and shared submitted hazard markers, current-location centering, pinch gestures, and zoom buttons use the native map. Map padding keeps the Google logo and attribution clear of the action panel.
+
+Debug builds can compile without a key and display a map-unavailable state while preserving Scan/Reports access. A missing key blocks release builds. Live map/zoom tests require a valid key; a keyless build cannot validate Google authentication or tile rendering.
+
+## Workflow reliability
+
+Version 1.2.1 isolates upload errors per submitted report so one failure does not block the rest of the queue. Upload requests have a 60-second timeout; IDs and object paths remain stable after interrupted responses. Acknowledging an upload requires the same report owner and pending state. Drafts remain local until explicitly submitted. See [WORKFLOW_TESTING.md](WORKFLOW_TESTING.md) for physical-phone and offline-to-cloud acceptance checks.
+
+## Location and community reports (1.2.2)
+
+The map centers at street level on a fresh foreground GPS fix when opened. The target requests a new fix and returns to the user's location after browsing. Shared coordinates refresh every 15 seconds while the map is foregrounded. The deployed `20261103_shared_hazards.sql` migration publishes only submitted reports; report/photo ownership stays private. Nearby accurate sightings are grouped on the server, and markers show distinct reporter counts. See SUPABASE_SETUP.md for deployment evidence and the limitations of proximity matching.
+
+Compose BOM 2026.04.01 keeps UI, runtime and UI tests on 1.11.0, matching the existing lifecycle dependency. The previous BOM mixed 1.10 UI tests with the 1.11 runtime and failed during asynchronous map updates.

@@ -51,7 +51,7 @@ class LocationAndEditingTest {
             assertFalse(store.removeCapture(capture.id,report,"owner-a"))
             assertFalse(store.deleteLocalReport(report,"owner-a"))
             assertTrue(java.io.File(capture.path).exists())
-            store.markSynced(report)
+            store.markSynced(report,"owner-a")
             assertTrue(store.deleteLocalReport(report,"owner-a"))
             assertFalse(java.io.File(capture.path).exists())
         } finally {

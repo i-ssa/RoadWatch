@@ -14,17 +14,17 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 
-/** Cache is account-specific and private. RLS restricts cloud reads to the signed-in owner. */
+/** Shared coordinates only; drafts and cache files remain account-specific. */
 class HazardRepository(private val context: Context, private val owner: String) {
-    private val file=File(context.filesDir,"map-"+MessageDigest.getInstance("SHA-256").digest(owner.toByteArray()).joinToString("") { "%02x".format(it) }+".json")
+    private val file=File(context.filesDir,"community-map-v1-"+MessageDigest.getInstance("SHA-256").digest(owner.toByteArray()).joinToString("") { "%02x".format(it) }+".json")
     fun updatedAt(): Long=file.takeIf { it.exists() }?.lastModified() ?: 0
     fun points(): JSONArray {
         val points=linkedMapOf<String,JSONObject>()
         val cached=runCatching { JSONArray(file.readText()) }.getOrDefault(JSONArray())
         for(i in 0 until cached.length()) { val point=cached.getJSONObject(i); points[point.getString("id")]=point }
         val store=ReportStore.get(context)
-        for(report in store.reports(owner)) for(capture in store.captures(report.id)) {
-            point(capture.id,capture.latitude,capture.longitude,report.status)?.let { points[capture.id]=it }
+        for(report in store.reports(owner).filter { it.status != "synced" }) for(capture in store.captures(report.id)) {
+            point(capture.id,capture.latitude,capture.longitude,"draft")?.let { points[capture.id]=it }
         }
         return JSONArray().apply { points.values.forEach { put(it) } }
     }
@@ -37,25 +37,21 @@ class HazardRepository(private val context: Context, private val owner: String) 
             client.auth.refreshCurrentSession()
             checkNotNull(client.auth.currentAccessTokenOrNull())
         } }
-        val response=client.httpClient.get("${BuildConfig.SUPABASE_URL.trimEnd('/')}/rest/v1/road_reports") {
+        val response=client.httpClient.get("${BuildConfig.SUPABASE_URL.trimEnd('/')}/rest/v1/map_hazards") {
             header("apikey",BuildConfig.SUPABASE_PUBLISHABLE_KEY)
             bearerAuth(token)
-            parameter("select","id,captures"); parameter("user_id","eq.$owner")
-            parameter("order","started_at_ms.desc"); parameter("limit",500)
+            parameter("select","id,latitude,longitude,reporter_count")
+            parameter("order","last_seen.desc"); parameter("limit",500)
         }
         check(response.status.value==200)
         check(generation==RoadWatchBackend.generation.get() && client.auth.currentUserOrNull()?.id==owner)
         val rows=JSONArray(response.bodyAsText())
         val points=JSONArray()
         for(i in 0 until rows.length()) {
-            val captures=rows.getJSONObject(i).optJSONArray("captures") ?: continue
-            for(j in 0 until captures.length()) {
-                val capture=captures.getJSONObject(j)
-                val lat=capture.optDouble("latitude",Double.NaN)
-                val lon=capture.optDouble("longitude",Double.NaN)
-                point(capture.getString("id"),lat,lon,"synced")?.let { points.put(it) }
-            }
+            val hazard=rows.getJSONObject(i)
+            point(hazard.getString("id"),hazard.optDouble("latitude",Double.NaN),hazard.optDouble("longitude",Double.NaN),"synced")?.let { points.put(it.put("reporter_count",hazard.optInt("reporter_count",1))) }
         }
+
         val atomic=android.util.AtomicFile(file)
         val stream=atomic.startWrite()
         try { stream.write(points.toString().toByteArray()); atomic.finishWrite(stream) }
