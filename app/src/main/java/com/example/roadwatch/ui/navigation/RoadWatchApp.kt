@@ -7,11 +7,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.roadwatch.R
 import com.example.roadwatch.data.auth.AuthViewModel
 import com.example.roadwatch.ui.auth.RoadWatchAuthFlow
 import com.example.roadwatch.ui.auth.UpdatePasswordScreen
 import com.example.roadwatch.ui.dashboard.DashboardScreen
-import com.example.roadwatch.ui.startup.RoadWatchLandingScreen
+import com.example.roadwatch.ui.startup.RoadWatchStartupFlow
 
 @Composable
 fun RoadWatchApp(auth: AuthViewModel) {
@@ -43,10 +44,11 @@ fun RoadWatchApp(auth: AuthViewModel) {
         state.signedIn -> Column(Modifier.fillMaxSize()) {
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Box(Modifier.weight(1f)) {
-                DashboardScreen(onBack = auth::signOut, isSigningOut = state.loading, owner = checkNotNull(state.userId))
+                DashboardScreen(onBack = auth::signOut, isSigningOut = state.loading, owner = state.userId)
             }
         }
         showAuth || state.recovering || state.error != null -> RoadWatchAuthFlow(
+            logoRes = R.drawable.roadwatch_logo,
             isLoading = state.loading,
             error = state.error,
             message = state.message,
@@ -58,6 +60,12 @@ fun RoadWatchApp(auth: AuthViewModel) {
             onRouteChanged = auth::clearFeedback,
             onBack = { auth.clearFeedback(); showAuth = false }
         )
-        else -> RoadWatchLandingScreen(onGetStarted = { showAuth = true })
+        else -> RoadWatchStartupFlow(
+            logoRes = R.drawable.roadwatch_logo,
+            isSignedIn = false,
+            isAppReady = true,
+            onSignUp = { showAuth = true },
+            onDashboard = { } // Authenticated sessions select the dashboard above.
+        )
     }
 }

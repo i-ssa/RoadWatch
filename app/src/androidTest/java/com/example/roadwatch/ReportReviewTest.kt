@@ -25,7 +25,7 @@ class ReportReviewTest {
                 compose.onAllNodes(androidx.compose.ui.test.hasText("Review captures")).fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("Submit report").assertDoesNotExist()
-            compose.onNodeWithText("Retry sync").assertDoesNotExist()
+            compose.onNodeWithText("Retry sync").performClick()
             assertEquals("draft",store.reports(owner).single().status)
             compose.onNodeWithText("Review captures").performClick()
             compose.onNodeWithText("Submit report").performClick()

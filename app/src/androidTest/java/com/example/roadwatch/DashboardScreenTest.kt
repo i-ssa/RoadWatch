@@ -3,7 +3,7 @@ package com.example.roadwatch.ui.dashboard
 import android.content.Context
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -23,12 +23,14 @@ class DashboardScreenTest {
         .getSharedPreferences("roadwatch_ui", Context.MODE_PRIVATE)
     @Before fun reset() { preferences.edit().clear().commit() }
     @Test fun introductionCompletesAndNavigationWorks() {
-        compose.setContent { DashboardScreen(onBack = {}, owner = "layout-test") }
-        compose.onNodeWithText("Got it").performClick()
-        compose.onNodeWithText("RoadWatch").assertIsDisplayed()
+        compose.setContent { DashboardScreen(onBack = {}) }
+        compose.onNodeWithText("Next").performClick()
+        compose.onNodeWithText("Next").performClick()
+        compose.onNodeWithText("Open RoadWatch").performClick()
+        compose.onNodeWithText("Welcome to RoadWatch.").assertIsDisplayed()
         compose.onNode(hasText("Profile") and hasClickAction()).performClick()
-        compose.onNodeWithText("Appearance").assertIsDisplayed()
-        compose.onNodeWithText("Device").performClick()
+        compose.onNodeWithText("Your space.").assertIsDisplayed()
+        compose.onNodeWithText("Use device appearance").performClick()
         compose.runOnIdle { assertEquals("system", preferences.getString("appearance", null)) }
     }
     @Test fun mapFillsViewportAndBackReturnsHome() {
@@ -46,16 +48,17 @@ class DashboardScreenTest {
         val screenshot=instrumentation.uiAutomation.takeScreenshot()
         java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"qa-map-dashboard.png").outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         compose.onNodeWithContentDescription("Back to Home").performClick()
-        compose.onNodeWithText("RoadWatch").assertIsDisplayed()
+        compose.onNodeWithText("Welcome to RoadWatch.").assertIsDisplayed()
     }
-    @Test fun homeOpensScanSetupAndReports() {
+    @Test fun sampleScanProducesReviewableDetection() {
         preferences.edit().putBoolean("intro_v1", true).commit()
-        compose.setContent { DashboardScreen(onBack = {}, owner = "layout-test") }
+        compose.setContent { DashboardScreen(onBack = {}) }
         compose.onNodeWithText("Start scan").performClick()
-        compose.onNodeWithText("Start camera scan").assertIsDisplayed()
-        compose.onNodeWithText("Cancel").performClick()
-        compose.onNodeWithText("Review reports").performClick()
-        compose.waitUntil(10000) { compose.onAllNodesWithText("No reports yet").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("No reports yet").assertIsDisplayed()
+        compose.onNodeWithText("Try sample scan").performClick()
+        compose.mainClock.advanceTimeBy(3000)
+        compose.onNodeWithText("Stop scan & review").performClick()
+        compose.onNodeWithText("Possible pothole").assertIsDisplayed()
+        compose.onNode(hasText("Profile") and hasClickAction()).performClick()
+        compose.onNodeWithText("Your space.").assertIsDisplayed()
     }
 }

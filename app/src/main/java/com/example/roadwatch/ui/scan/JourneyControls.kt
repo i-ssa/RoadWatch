@@ -32,10 +32,6 @@ fun JourneyGlyph(symbol: String, color: Color = Color.White) {
         fun line(x:Float,y:Float,a:Float,b:Float) = drawLine(color,Offset(x*unit,y*unit),Offset(a*unit,b*unit),2*unit)
         when(symbol) {
             "back" -> { line(19f,12f,5f,12f);line(5f,12f,12f,5f);line(5f,12f,12f,19f) }
-            "forward" -> { line(9f,5f,16f,12f);line(16f,12f,9f,19f) }
-            "home" -> { line(3f,11f,12f,3f);line(12f,3f,21f,11f);line(5f,10f,5f,21f);line(19f,10f,19f,21f);line(5f,21f,19f,21f);line(10f,21f,10f,15f);line(10f,15f,14f,15f);line(14f,15f,14f,21f) }
-            "map" -> { line(3f,5f,9f,3f);line(9f,3f,15f,5f);line(15f,5f,21f,3f);line(3f,5f,3f,21f);line(9f,3f,9f,19f);line(15f,5f,15f,21f);line(21f,3f,21f,19f);line(3f,21f,9f,19f);line(9f,19f,15f,21f);line(15f,21f,21f,19f) }
-            "profile" -> { drawCircle(color,4*unit,Offset(12*unit,7*unit),style=Stroke(2*unit));drawArc(color,180f,180f,false,Offset(4*unit,14*unit),androidx.compose.ui.geometry.Size(16*unit,14*unit),style=Stroke(2*unit)) }
             "plus" -> { line(5f,12f,19f,12f);line(12f,5f,12f,19f) }
             "minus" -> line(5f,12f,19f,12f)
             "refresh" -> { drawArc(color,40f,285f,false,Offset(4*unit,4*unit),androidx.compose.ui.geometry.Size(16*unit,16*unit),style=Stroke(2*unit));line(20f,4f,20f,10f);line(20f,10f,14f,10f) }
