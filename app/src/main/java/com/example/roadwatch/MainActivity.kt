@@ -11,6 +11,10 @@ import com.example.roadwatch.ui.navigation.RoadWatchApp
 import com.example.roadwatch.ui.theme.RoadWatchTheme
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(newBase.englishContext())
+    }
+
     private val auth by lazy { ViewModelProvider(this)[AuthViewModel::class.java] }
 
     override fun onCreate(savedInstanceState: Bundle?) {

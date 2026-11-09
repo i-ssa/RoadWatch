@@ -9,9 +9,15 @@ val authProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
+val releaseProperties = Properties().apply {
+    val file = rootProject.file(".signing/release.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 fun authConfig(name: String): String = "\"" +
     (authProperties.getProperty(name) ?: System.getenv(name).orEmpty())
         .replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val mapsApiKey = (authProperties.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY").orEmpty()).trim()
 
 android {
     namespace = "com.example.roadwatch"
@@ -21,18 +27,33 @@ android {
 
     defaultConfig {
         applicationId = "com.example.roadwatch"
+        providers.gradleProperty("roadwatchAbi").orNull?.let { phoneAbi ->
+            ndk { abiFilters += phoneAbi }
+        }
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 9
+        versionName = "1.2.3"
         buildConfigField("String", "SUPABASE_URL", authConfig("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", authConfig("SUPABASE_PUBLISHABLE_KEY"))
+
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("boolean", "MAPS_CONFIGURED", mapsApiKey.isNotBlank().toString())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseProperties.isNotEmpty()) create("roadwatchRelease") {
+            storeFile = rootProject.file(releaseProperties.getProperty("storeFile"))
+            storePassword = releaseProperties.getProperty("storePassword")
+            keyAlias = releaseProperties.getProperty("keyAlias")
+            keyPassword = releaseProperties.getProperty("keyPassword")
+        }
+    }
     buildTypes {
         release {
+            if (releaseProperties.isNotEmpty()) signingConfig = signingConfigs.getByName("roadwatchRelease")
             optimization {
                 enable = false
             }
@@ -42,13 +63,24 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    // Compress native libraries so one APK can include every supported ABI and fit Drive uploads.
+    packaging { jniLibs { useLegacyPackaging = true } }
     buildFeatures {
         compose = true
         buildConfig = true
     }
 }
 
+// Prevent distributing a release whose Google basemap cannot authenticate.
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    val keyConfigured = mapsApiKey.isNotBlank()
+    doFirst { check(keyConfigured) {
+        "Google Maps setup required: add MAPS_API_KEY to local.properties (see GOOGLE_MAPS_SETUP.md)."
+    } }
+}
+
 dependencies {
+    implementation("com.google.maps.android:maps-compose:6.12.0")
     implementation(platform("io.github.jan-tennert.supabase:bom:3.2.6"))
     implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.ktor:ktor-client-okhttp:3.3.1")

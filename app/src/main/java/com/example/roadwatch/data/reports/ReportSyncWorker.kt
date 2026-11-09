@@ -7,11 +7,12 @@ import com.example.roadwatch.data.auth.RoadWatchBackend
 import io.github.jan.supabase.auth.auth
 import io.ktor.client.request.*
 import io.ktor.http.*
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ReportSyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -25,53 +26,50 @@ class ReportSyncWorker(context: Context, params: WorkerParameters) : CoroutineWo
         }
         return try {
             RoadWatchBackend.restore()
-            RoadWatchBackend.sessionLock.withLock {
-                // Never upload account A's reports using account B's session.
-                if (client.auth.currentUserOrNull()?.id != owner) {
-                    store.syncError(owner, "Sign in to this account to sync its reports.")
-                    return@withLock Result.success()
-                }
+            val generation=RoadWatchBackend.generation.get()
+            val token=withTimeout(15000) { RoadWatchBackend.sessionLock.withLock {
+                if(client.auth.currentUserOrNull()?.id!=owner || generation!=RoadWatchBackend.generation.get()) throw CancellationException("Account changed")
                 client.auth.refreshCurrentSession()
-                val token = client.auth.currentAccessTokenOrNull() ?: return@withLock Result.retry()
-                suspend fun send(path: String, body: Any, type: ContentType, upsert: Boolean = false) {
-                    val response = client.httpClient.request("${BuildConfig.SUPABASE_URL.trimEnd('/')}/$path") {
-                        method = HttpMethod.Post
-                        header("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-                        bearerAuth(token)
-                        contentType(type)
-                        if (upsert) header("x-upsert", "true")
-                        if (path.startsWith("rest/")) header("Prefer", "resolution=merge-duplicates,return=minimal")
-                        setBody(body)
-                    }
-                    if (response.status.value !in 200..299) throw SyncFailure(response.status.value)
-                }
-                for (report in store.reports(owner).filter { it.status == "pending" }) {
-                    val captures = JSONArray()
-                    for (capture in store.captures(report.id)) {
-                        val remotePath = "$owner/${report.id}/${capture.id}.jpg"
-                        send("storage/v1/object/roadwatch-captures/$remotePath", File(capture.path).readBytes(), ContentType.Image.JPEG, true)
-                        captures.put(JSONObject().put("id",capture.id).put("image_path",remotePath).put("boxes",JSONArray(capture.boxes)))
-                    }
-                    // Stable UUID + upsert makes a retry after a lost response safe.
-                    val payload = JSONObject().put("id",report.id).put("user_id",owner)
-                        .put("started_at_ms",report.started).put("captures",captures).put("model_version","cleaned-v3-yolo11s")
-                    send("rest/v1/road_reports?on_conflict=id", payload.toString(), ContentType.Application.Json)
-                    store.markSynced(report.id)
-                }
-                Result.success()
+                client.auth.currentAccessTokenOrNull()
+            } } ?: return Result.retry()
+            fun checkAccount() {
+                if(client.auth.currentUserOrNull()?.id!=owner || generation!=RoadWatchBackend.generation.get()) throw CancellationException("Account changed")
             }
+            suspend fun send(path: String, body: Any, type: ContentType, upsert: Boolean = false) {
+                checkAccount()
+                val response = client.httpClient.request("${BuildConfig.SUPABASE_URL.trimEnd('/')}/$path") {
+                    method = HttpMethod.Post
+                    header("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
+                    bearerAuth(token)
+                    contentType(type)
+                    if (upsert) header("x-upsert", "true")
+                    if (path.startsWith("rest/")) header("Prefer", "resolution=merge-duplicates,return=minimal")
+                    setBody(body)
+                }
+                checkAccount()
+                if (response.status.value !in 200..299) throw SyncFailure(response.status.value)
+            }
+            val engine=ReportSyncEngine(store,::checkAccount,
+                uploadCapture={ path,bytes -> send("storage/v1/object/roadwatch-captures/$path",bytes,ContentType.Image.JPEG,true) },
+                uploadReport={ payload -> send("rest/v1/road_reports?on_conflict=id",payload,ContentType.Application.Json) })
+            if(engine.sync(owner)) Result.success() else Result.retry()
+        } catch(e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            store.syncError(owner,"Sign-in refresh timed out. Your report is saved and will retry.")
+            Result.retry()
         } catch(e: CancellationException) { throw e }
         catch(e: Exception) {
-            store.syncError(owner, when {
-                e is SyncFailure && e.code in listOf(401,403) -> "Cloud access was denied. Check your sign-in and project permissions."
-                e is SyncFailure && e.code in listOf(400,404) -> "Cloud storage needs setup. Your report is safe on this device."
-                else -> "Sync could not finish. Your report is saved and will retry automatically."
-            })
+            store.syncError(owner,syncFailureMessage(e))
             Result.retry()
         } // Keep all local data until confirmed by the server.
     }
-    private class SyncFailure(val code: Int) : Exception()
     companion object {
+        fun cancel(context: Context, owner: String) {
+            WorkManager.getInstance(context).apply {
+                cancelUniqueWork("report-sync-$owner")
+                cancelUniqueWork("report-recovery-$owner")
+            }
+        }
         fun schedule(context: Context, owner: String) {
             val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             val data = workDataOf("owner" to owner)

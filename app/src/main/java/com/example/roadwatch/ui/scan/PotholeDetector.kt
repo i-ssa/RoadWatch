@@ -17,6 +17,9 @@ data class Detection(val x: Float, val y: Float, val width: Float, val height: F
 
 /** YOLO11 single-class FP32 export: RGB NCHW [1,3,640,640], output [1,5,8400]. */
 class PotholeDetector(context: Context) : AutoCloseable {
+    private val confidenceThreshold = context.assets.open("pothole-model.json").bufferedReader().use {
+        JSONObject(it.readText()).getDouble("confidence").toFloat()
+    }
     private val environment = OrtEnvironment.getEnvironment()
     private val options = OrtSession.SessionOptions().apply { setIntraOpNumThreads(2) }
     private val session = environment.createSession(context.assets.open("pothole.onnx").use { it.readBytes() }, options)
@@ -37,7 +40,7 @@ class PotholeDetector(context: Context) : AutoCloseable {
                 @Suppress("UNCHECKED_CAST")
                 val output = (result[0].value as Array<Array<FloatArray>>)[0]
                 check(output.size == 5) { "Unexpected detector output" }
-                val candidates = output[0].indices.filter { output[4][it]>=0.25f }.map { i ->
+                val candidates = output[0].indices.filter { output[4][it] >= confidenceThreshold }.map { i ->
                     val x1=((output[0][i]-output[2][i]/2-left)/scale/source.width).coerceIn(0f,1f)
                     val y1=((output[1][i]-output[3][i]/2-top)/scale/source.height).coerceIn(0f,1f)
                     val x2=((output[0][i]+output[2][i]/2-left)/scale/source.width).coerceIn(0f,1f)

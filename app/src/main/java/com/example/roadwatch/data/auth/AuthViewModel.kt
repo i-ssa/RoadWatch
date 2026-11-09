@@ -161,11 +161,16 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { it.copy(signedIn = false, message = "Password updated. Sign in with your new password.") }
     }
 
-    fun signOut() = request {
-        // Clearing locally also works without internet; pending reports remain owned by this account.
-        client!!.auth.clearSession()
-        setRecovery(false)
-        mutableState.update { it.copy(signedIn = false, userId = null) }
+    fun signOut() {
+        if(state.value.loading) return
+        RoadWatchBackend.generation.incrementAndGet()
+        state.value.userId?.let { com.example.roadwatch.data.reports.ReportSyncWorker.cancel(getApplication(),it) }
+        request {
+            // Clearing locally also works without internet; pending reports remain owned by this account.
+            client!!.auth.clearSession()
+            setRecovery(false)
+            mutableState.update { it.copy(signedIn = false, userId = null) }
+        }
     }
 
     private fun setRecovery(value: Boolean) {

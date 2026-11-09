@@ -16,7 +16,7 @@
     8400
   ],
   "opset": 17,
-  "confidence": 0.25,
+  "confidence": 0.46,
   "iou": 0.45,
   "classes": [
     "pothole"
