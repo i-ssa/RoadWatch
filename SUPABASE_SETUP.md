@@ -112,10 +112,10 @@ Function sends one batched request and applies a 4.5-second deadline. Android
 waits up to 5.5 seconds for network verification on the camera analysis thread,
 spaces attempts at least 12 seconds apart, and slows down on failures or 429s.
 
-Rejected boxes are removed before saving. Confirmed boxes retain their
-verification status in local and synced reports. Offline, uncertain, excess and
-throttled candidates remain unverified, as do captures saved before this
-feature. Verification is performed during capture.
+Captures are saved only when Gemini confirms at least one candidate. Saved
+captures contain only confirmed boxes. Rejected, uncertain and unchecked
+candidates are discarded, including when verification is offline, throttled
+or fails. Existing captures retain their original verification status.
 
 Run the mocked Edge Function tests on Node 22:
 
@@ -126,6 +126,6 @@ node supabase/functions/verify-potholes/verify.test.mjs
 For live acceptance, build and sign in to the configured app. Scan a known
 pothole and a known lookalike that triggers YOLO, allowing at least 12 seconds
 between attempts. Confirm the first is labeled in the scan and saved report
-and the second is discarded when Gemini explicitly rejects it. Repeat offline
-and verify a positive YOLO capture is still saved as unverified. Compare
+and the second is discarded if Gemini gives no confirmation. Repeat offline
+and verify that positive YOLO candidates do not create captures. Compare
 confirmed detections against labeled images before relying on their accuracy.
