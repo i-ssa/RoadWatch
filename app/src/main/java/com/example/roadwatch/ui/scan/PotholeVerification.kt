@@ -22,16 +22,8 @@ import kotlin.math.roundToInt
 
 internal enum class Verdict { CONFIRMED, REJECTED, UNCERTAIN }
 
-internal data class RetainedDetection(val box: Detection, val verified: Boolean)
-
-internal fun retainDetections(boxes: List<Detection>, verdicts: List<Verdict>): List<RetainedDetection> =
-    boxes.mapIndexedNotNull { index, box ->
-        when (verdicts.getOrNull(index)) {
-            Verdict.REJECTED -> null
-            Verdict.CONFIRMED -> RetainedDetection(box, true)
-            else -> RetainedDetection(box, false)
-        }
-    }
+internal fun confirmedDetections(boxes: List<Detection>, verdicts: List<Verdict>): List<Detection> =
+    boxes.filterIndexed { index, _ -> verdicts.getOrNull(index) == Verdict.CONFIRMED }
 
 /** Called serially on the camera analysis executor, only for positive YOLO frames. */
 internal class PotholeVerification(private val owner: String) {

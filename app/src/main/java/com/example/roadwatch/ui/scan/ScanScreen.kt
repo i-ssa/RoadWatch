@@ -109,7 +109,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
             }
         }
     }
-    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Detection runs on this phone. When connected, candidate images may be sent to Google Gemini for verification. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
+    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Detection runs on this phone. When online, candidate images may be sent to Google Gemini. Only Gemini-confirmed potholes are saved. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
     if(permission) DisposableEffect(owner,lifecycle) {
         val executor = Executors.newSingleThreadExecutor()
         val active = AtomicBoolean(true)
@@ -161,23 +161,22 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                                 val elapsed=android.os.SystemClock.elapsedRealtime()-started
                                 main.execute { latency=elapsed }
                                 if(boxes.isNotEmpty()) {
-                                    val retained = retainDetections(boxes, verifier.verify(bitmap, boxes))
-                                    if (retained.isEmpty()) {
-                                        main.execute { verificationMessage = "Gemini rejected the latest detections" }
+                                    val confirmed = confirmedDetections(boxes, verifier.verify(bitmap, boxes))
+                                    if (confirmed.isEmpty()) {
+                                        main.execute { verificationMessage = "Candidate discarded · no Gemini confirmation" }
                                     } else {
                                         val bytes = ByteArrayOutputStream().use {
                                             check(bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it))
                                             it.toByteArray()
                                         }
                                         val savedBoxes = JSONArray()
-                                        retained.forEach { (box, verified) ->
-                                            savedBoxes.put(box.json().put("verification", if (verified) "confirmed" else "unverified"))
+                                        confirmed.forEach { box ->
+                                            savedBoxes.put(box.json().put("verification", "confirmed"))
                                         }
                                         store.addCapture(reportId!!, bytes, savedBoxes, location)
-                                        val confirmed = retained.count { it.verified }
                                         main.execute {
                                             count++
-                                            verificationMessage = detectionSummary(confirmed, retained.size - confirmed)
+                                            verificationMessage = "Gemini confirmed ${confirmed.size}"
                                         }
                                     }
                                 } else main.execute { message="Scanning · no pothole in the latest frame" }
