@@ -60,3 +60,46 @@ Run `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:connectedDebugAndr
 `LiveAccountScanTest` is skipped by default because it uses the account already signed in on the device. For an explicit acceptance check, disable the emulator's Wi-Fi/mobile data and run `recordOfflineScan` with instrumentation argument `liveAccount=true`. Re-enable connectivity, then run `syncRecordedScan` with `liveAccount=true` and `reportId` set to the UUID printed by the first phase. It verifies the actual report row and every uploaded private image. This creates a real emulator test report in that account; its model suggestions are not verified road defects.
 
 On 2 November 2026, the debug build, two JVM tests, nine regular device tests, and both live acceptance phases passed. A force-stopped app reopened directly to the saved account's dashboard with emulator Wi-Fi and mobile data disabled. The offline emulator scan uploaded one report and one capture after reconnecting.
+
+## Gemini pothole verification
+
+For the existing Supabase project, apply
+`supabase/migrations/20261118_pothole_verification.sql` in the SQL editor. In
+**Edge Functions → Secrets**, set `GEMINI_API_KEY` using a key scoped to the
+Gemini API. The default model is `gemini-3.1-flash-lite`. The optional
+`GEMINI_MODEL` secret can select another Gemini model that supports image input,
+structured output and minimal thinking. Keep the Gemini key in Supabase
+Secrets. Android still uses only the public Supabase key and the user's session.
+
+Deploy from this repository with the Supabase CLI:
+
+```bash
+supabase functions deploy verify-potholes --project-ref YOUR_PROJECT_REF
+```
+
+The function checks the caller's token with Supabase Auth and uses a
+service-role-only database function to enforce a 10-second account limit and
+30 Gemini calls per project per minute across Edge Function instances. Each
+request contains one downscaled frame and up to three padded crops of YOLO
+candidates. Google receives only those images and box coordinates. The Edge
+Function sends one batched request and applies a 4.5-second deadline. Android
+waits up to 5.5 seconds for network verification on the camera analysis thread,
+spaces attempts at least 12 seconds apart, and slows down on failures or 429s.
+
+Rejected boxes are removed before saving. Confirmed boxes retain their
+verification status in local and synced reports. Offline, uncertain, excess and
+throttled candidates remain unverified, as do captures saved before this
+feature. Verification is performed during capture.
+
+Run the mocked Edge Function tests on Node 22:
+
+```bash
+node supabase/functions/verify-potholes/verify.test.mjs
+```
+
+For live acceptance, build and sign in to the configured app. Scan a known
+pothole and a known lookalike that triggers YOLO, allowing at least 12 seconds
+between attempts. Confirm the first is labeled in the scan and saved report
+and the second is discarded when Gemini explicitly rejects it. Repeat offline
+and verify a positive YOLO capture is still saved as unverified. Compare
+confirmed detections against labeled images before relying on their accuracy.

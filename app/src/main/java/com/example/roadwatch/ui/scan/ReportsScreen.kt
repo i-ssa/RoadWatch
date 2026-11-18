@@ -13,6 +13,7 @@ import com.example.roadwatch.data.reports.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import java.text.DateFormat
 import java.util.Date
 
@@ -53,6 +54,16 @@ private fun CaptureList(store: ReportStore, reportId: String) {
             value=withContext(Dispatchers.IO) { BitmapFactory.decodeFile(capture.path,BitmapFactory.Options().apply { inSampleSize=2 }) }
         }
         bitmap?.let { Image(it.asImageBitmap(),"Captured road image",Modifier.fillMaxWidth().heightIn(max=240.dp)) }
-        Text("Possible pothole · model suggestion. Location and severity have not been measured.")
+        val boxes = remember(capture.boxes) { JSONArray(capture.boxes) }
+        val confirmed = (0 until boxes.length()).count {
+            boxes.optJSONObject(it)?.optString("verification") == "confirmed"
+        }
+        Text(detectionSummary(confirmed, boxes.length() - confirmed))
     }
+}
+
+internal fun detectionSummary(confirmed: Int, unverified: Int): String = when {
+    confirmed == 0 -> "Possible pothole · unverified"
+    unverified == 0 -> "Gemini confirmed $confirmed"
+    else -> "Gemini confirmed $confirmed · $unverified unverified"
 }

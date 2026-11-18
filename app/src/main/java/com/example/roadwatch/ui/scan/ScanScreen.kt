@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.roadwatch.data.reports.ReportStore
 import com.example.roadwatch.data.reports.ReportSyncWorker
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -49,6 +50,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
         } else {
             AndroidView(factory={preview},modifier=Modifier.weight(1f).fillMaxWidth())
             Text(message)
+            Text("When connected, candidate images may be sent to Google Gemini for verification.")
             Text("$count captures saved on this device")
             Text("Stopping saves your report for automatic sync. Location is not recorded yet.")
             Button(onClick={stopping=true; stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth()) { Text(if(stopping) "Saving…" else "Stop scan & save report") }
@@ -59,6 +61,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
         val active = AtomicBoolean(true)
         val completed = AtomicBoolean(false)
         val store = ReportStore.get(context)
+        val verifier = PotholeVerification(owner)
         var reportId: String? = null
         var detector: PotholeDetector? = null
         var provider: ProcessCameraProvider? = null
@@ -100,9 +103,25 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                             try {
                                 val boxes=detector!!.detect(bitmap)
                                 if(boxes.isNotEmpty()) {
-                                    val bytes=ByteArrayOutputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG,85,it); it.toByteArray() }
-                                    store.addCapture(reportId!!,bytes,PotholeDetector.json(boxes))
-                                    main.execute { count++; message="Possible pothole detected · saved offline" }
+                                    val retained = retainDetections(boxes, verifier.verify(bitmap, boxes))
+                                    if (retained.isEmpty()) {
+                                        main.execute { message = "Gemini rejected the latest detections" }
+                                    } else {
+                                        val bytes = ByteArrayOutputStream().use {
+                                            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it))
+                                            it.toByteArray()
+                                        }
+                                        val savedBoxes = JSONArray()
+                                        retained.forEach { (box, verified) ->
+                                            savedBoxes.put(box.json().put("verification", if (verified) "confirmed" else "unverified"))
+                                        }
+                                        store.addCapture(reportId!!, bytes, savedBoxes)
+                                        val confirmed = retained.count { it.verified }
+                                        main.execute {
+                                            count++
+                                            message = detectionSummary(confirmed, retained.size - confirmed)
+                                        }
+                                    }
                                 } else main.execute { message="Scanning · no pothole in the latest frame" }
                             } finally { if(bitmap!==raw) bitmap.recycle(); raw.recycle() }
                         }
