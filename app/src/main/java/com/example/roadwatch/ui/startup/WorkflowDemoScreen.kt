@@ -135,4 +135,3 @@ fun RoadWatchSplashScreen(@DrawableRes logoRes: Int, progress: Float? = null,
         }
     }
 }
-

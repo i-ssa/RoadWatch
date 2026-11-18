@@ -48,7 +48,7 @@ def main():
         "onnx_sha256": hashlib.sha256((output / "pothole.onnx").read_bytes()).hexdigest(),
         "ultralytics_version": ultralytics.__version__,
         "input": [1,3,640,640], "output": [1,5,8400], "opset": 17,
-        "confidence": 0.25, "iou": 0.45, "classes": ["pothole"]
+        "confidence": 0.46, "iou": 0.45, "classes": ["pothole"]
     }, indent=2) + "\n")
     print("Exported and validated", output / "pothole.onnx")
 

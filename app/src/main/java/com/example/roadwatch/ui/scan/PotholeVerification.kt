@@ -136,3 +136,9 @@ internal class PotholeVerification(private val owner: String) {
         }
     }
 }
+
+internal fun detectionSummary(confirmed: Int, unverified: Int): String = when {
+    confirmed == 0 -> "Possible pothole · unverified"
+    unverified == 0 -> "Gemini confirmed $confirmed"
+    else -> "Gemini confirmed $confirmed · $unverified unverified"
+}

@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 
 /** One session for the UI and background sync. Loading storage never requires a network. */
 object RoadWatchBackend {
+    val generation=java.util.concurrent.atomic.AtomicLong(0)
     val sessionLock = Mutex()
     val client = if (BuildConfig.SUPABASE_URL.startsWith("https://") && BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank()) {
         createSupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_PUBLISHABLE_KEY) {

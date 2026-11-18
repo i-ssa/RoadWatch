@@ -48,4 +48,3 @@ fun RoadWatchLandingScreen(@DrawableRes logoRes: Int, onGetStarted: () -> Unit,
         }
     }
 }
-
