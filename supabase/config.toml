@@ -1,0 +1,6 @@
+project_id = "roadwatch"
+
+# The function validates the user's bearer token with Supabase Auth, including
+# projects using asymmetric JWT signing keys.
+[functions.verify-potholes]
+verify_jwt = false

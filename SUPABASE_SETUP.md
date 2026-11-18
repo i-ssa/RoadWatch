@@ -86,3 +86,46 @@ Each capture has an idempotent observation key. A submitted capture within 10 me
 Deployed on 3 November 2026 to RoadWatch (`pbyfwdwndnopgddymsee`) using the authenticated Supabase SQL editor. The deployed SQL exactly matches `20261103_shared_hazards.sql`. Live transactional checks in `supabase/tests/live_shared_hazards.sql` passed under two authenticated user identities: shared marker visibility, private report/photo metadata isolation, distinct-user counts, upload retries, direct-write denial and anonymous-read denial. All synthetic users, reports, storage metadata and markers were rolled back. A real anonymous REST request returned HTTP 401. The three pre-existing uploaded reports produced zero geolocated observations; no coordinates were invented for them. Concurrent local PostgreSQL transactions also produced one marker with two reporters.
 
 The live checks exercise deployed database roles/RLS; they do not claim two physical phones were tested. `LiveCommunityMapTest` is an opt-in read-only Android REST/cache check (`liveAccount=true`) requiring a signed-in device.
+
+## Gemini pothole verification
+
+For the existing Supabase project, apply
+`supabase/migrations/20261118_pothole_verification.sql` in the SQL editor. In
+**Edge Functions → Secrets**, set `GEMINI_API_KEY` using a key scoped to the
+Gemini API. The default model is `gemini-3.1-flash-lite`. The optional
+`GEMINI_MODEL` secret can select another Gemini model that supports image input,
+structured output and minimal thinking. Keep the Gemini key in Supabase
+Secrets. Android still uses only the public Supabase key and the user's session.
+
+Deploy from this repository with the Supabase CLI:
+
+```bash
+supabase functions deploy verify-potholes --project-ref YOUR_PROJECT_REF
+```
+
+The function checks the caller's token with Supabase Auth and uses a
+service-role-only database function to enforce a 10-second account limit and
+30 Gemini calls per project per minute across Edge Function instances. Each
+request contains one downscaled frame and up to three padded crops of YOLO
+candidates. Google receives only those images and box coordinates. The Edge
+Function sends one batched request and applies a 4.5-second deadline. Android
+waits up to 5.5 seconds for network verification on the camera analysis thread,
+spaces attempts at least 12 seconds apart, and slows down on failures or 429s.
+
+Rejected boxes are removed before saving. Confirmed boxes retain their
+verification status in local and synced reports. Offline, uncertain, excess and
+throttled candidates remain unverified, as do captures saved before this
+feature. Verification is performed during capture.
+
+Run the mocked Edge Function tests on Node 22:
+
+```bash
+node supabase/functions/verify-potholes/verify.test.mjs
+```
+
+For live acceptance, build and sign in to the configured app. Scan a known
+pothole and a known lookalike that triggers YOLO, allowing at least 12 seconds
+between attempts. Confirm the first is labeled in the scan and saved report
+and the second is discarded when Gemini explicitly rejects it. Repeat offline
+and verify a positive YOLO capture is still saved as unverified. Compare
+confirmed detections against labeled images before relying on their accuracy.

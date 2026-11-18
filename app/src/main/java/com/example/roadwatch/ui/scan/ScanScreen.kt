@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.roadwatch.data.reports.ReportStore
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,6 +52,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
     }
     var latency by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf("Loading pothole detector…") }
+    var verificationMessage by remember { mutableStateOf<String?>(null) }
     var count by remember { mutableIntStateOf(0) }
     var stopping by remember { mutableStateOf(false) }
     var stop by remember { mutableStateOf<(() -> Unit)?>(null) }
@@ -91,6 +93,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                             Text("captures",fontSize=11.sp,color=Color(0xFFB9C8BD))
                         }
                     }
+                    verificationMessage?.let { Text(it, fontSize = 13.sp, color = Color(0xFFB9C8BD)) }
                     Button(onClick={stopping=true;stop?.invoke()},enabled=!stopping && stop!=null,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp),shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=Color(0xFFDBF0DF),contentColor=Color(0xFF133721))) {
                         JourneyGlyph("stop",Color(0xFF133721));Spacer(Modifier.width(10.dp));Text(if(stopping) "Saving…" else "Stop & review")
                     }
@@ -106,12 +109,13 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
             }
         }
     }
-    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Scanning runs on this phone. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
+    if(showInfo) AlertDialog(onDismissRequest={showInfo=false},title={Text("About this scan")},text={Text("Keep your phone mounted and set up while parked. Detection runs on this phone. When connected, candidate images may be sent to Google Gemini for verification. Stop to save a private draft, then review before submitting. Location is optional and needs a fresh fix. Model suggestions may be incorrect."+(if(latency>0) "\n\nLast analysis: $latency ms" else ""))},confirmButton={TextButton(onClick={showInfo=false}) { Text("Got it") }})
     if(permission) DisposableEffect(owner,lifecycle) {
         val executor = Executors.newSingleThreadExecutor()
         val active = AtomicBoolean(true)
         val completed = AtomicBoolean(false)
         val store = ReportStore.get(context)
+        val verifier = PotholeVerification(owner)
         var reportId: String? = null
         var detector: PotholeDetector? = null
         var provider: ProcessCameraProvider? = null
@@ -157,9 +161,25 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
                                 val elapsed=android.os.SystemClock.elapsedRealtime()-started
                                 main.execute { latency=elapsed }
                                 if(boxes.isNotEmpty()) {
-                                    val bytes=ByteArrayOutputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG,85,it); it.toByteArray() }
-                                    store.addCapture(reportId!!,bytes,PotholeDetector.json(boxes),location)
-                                    main.execute { count++; message="Possible pothole detected · saved offline" }
+                                    val retained = retainDetections(boxes, verifier.verify(bitmap, boxes))
+                                    if (retained.isEmpty()) {
+                                        main.execute { verificationMessage = "Gemini rejected the latest detections" }
+                                    } else {
+                                        val bytes = ByteArrayOutputStream().use {
+                                            check(bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it))
+                                            it.toByteArray()
+                                        }
+                                        val savedBoxes = JSONArray()
+                                        retained.forEach { (box, verified) ->
+                                            savedBoxes.put(box.json().put("verification", if (verified) "confirmed" else "unverified"))
+                                        }
+                                        store.addCapture(reportId!!, bytes, savedBoxes, location)
+                                        val confirmed = retained.count { it.verified }
+                                        main.execute {
+                                            count++
+                                            verificationMessage = detectionSummary(confirmed, retained.size - confirmed)
+                                        }
+                                    }
                                 } else main.execute { message="Scanning · no pothole in the latest frame" }
                             } finally { if(bitmap!==raw) bitmap.recycle(); raw.recycle() }
                         }

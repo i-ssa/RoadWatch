@@ -39,6 +39,12 @@ fun CaptureImage(capture: Capture) {
     for(index in 0 until boxes.length()) {
         Text("Possible pothole ${index+1} · ${(boxes.getJSONObject(index).optDouble("confidence",0.0)*100).toInt()}% confidence")
     }
+    if (boxes.length() > 0) {
+        val confirmed = (0 until boxes.length()).count {
+            boxes.optJSONObject(it)?.optString("verification") == "confirmed"
+        }
+        Text(detectionSummary(confirmed, boxes.length() - confirmed))
+    }
     Text(if(capture.latitude!=null && capture.longitude!=null) "Location: %.5f, %.5f · accuracy ±%.0f m".format(capture.latitude,capture.longitude,capture.accuracy ?: 0f) else "Location unavailable for this capture")
     Text("Model suggestion · severity has not been measured")
 }
