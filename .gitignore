@@ -17,3 +17,5 @@ local.properties
 .kotlin/
 
 .signing/
+
+/roadwatch.properties

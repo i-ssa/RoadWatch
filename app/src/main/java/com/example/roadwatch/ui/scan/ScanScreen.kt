@@ -21,12 +21,14 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.roadwatch.data.reports.ReportStore
@@ -41,13 +43,21 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
     var permission by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED) }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { permission=it }
     var locationEnabled by remember { mutableStateOf(ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED) }
-    val locationRequest=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        locationEnabled=it.values.any { granted -> granted }
+    val locationPermissions = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    var locationRequested by rememberSaveable { mutableStateOf(false) }
+    val locationRequest = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        locationEnabled = it.values.any { granted -> granted }
     }
-    val locations=remember { ScanLocation(context) }
-    DisposableEffect(locationEnabled) {
-        if(locationEnabled) locations.start()
-        onDispose { locations.close() }
+    LaunchedEffect(permission) {
+        if (permission && !locationEnabled && !locationRequested) {
+            locationRequested = true
+            locationRequest.launch(locationPermissions)
+        }
+    }
+    val locations = remember { ScanLocation(context) }
+    LifecycleStartEffect(permission, locationEnabled) {
+        if (permission && locationEnabled) locations.start()
+        onStopOrDispose { locations.close() }
     }
     var latency by remember { mutableLongStateOf(0L) }
     var message by remember { mutableStateOf("Loading pothole detector…") }
@@ -75,7 +85,7 @@ fun ScanScreen(owner: String, onFinished: () -> Unit) {
             JourneyButton("Scan information","info",{showInfo=true},dark=true)
         }
         if(permission) Column(Modifier.align(if(compact) Alignment.CenterEnd else Alignment.TopEnd).then(if(compact) Modifier.padding(end=20.dp) else Modifier.statusBarsPadding().padding(top=100.dp,end=20.dp)),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            JourneyButton(if(locationEnabled) "Capture location information" else "Enable capture location","locate",{if(locationEnabled) showInfo=true else locationRequest.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION))},dark=true)
+            JourneyButton(if(locationEnabled) "Capture location information" else "Enable capture location","locate",{if(locationEnabled) showInfo=true else locationRequest.launch(locationPermissions)},dark=true)
             if(camera?.cameraInfo?.hasFlashUnit()==true) JourneyButton(if(torch) "Turn torch off" else "Turn torch on","flash",{torch=!torch;camera?.cameraControl?.enableTorch(torch)},dark=true,active=torch)
         }
         Surface(Modifier.align(if(compact) Alignment.BottomStart else Alignment.BottomCenter).navigationBarsPadding().padding(20.dp).widthIn(max=if(compact) 360.dp else 480.dp).fillMaxWidth(),shape=RoundedCornerShape(28.dp),color=Color(0xF51B2921),contentColor=Color.White) {

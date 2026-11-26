@@ -23,11 +23,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 data class AuthUiState(
     val restoring: Boolean = true,
     val signedIn: Boolean = false,
     val userId: String? = null,
+    val userEmail: String? = null,
+    val fullName: String? = null,
     val recovering: Boolean = false,
     val loading: Boolean = false,
     val resendSeconds: Int = 0,
@@ -59,8 +63,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     mutableState.update { old ->
                         when (status) {
                             SessionStatus.Initializing -> old.copy(restoring = true)
-                            is SessionStatus.Authenticated -> old.copy(restoring = false, signedIn = true, userId = status.session.user?.id)
-                            is SessionStatus.NotAuthenticated -> old.copy(restoring = false, signedIn = false, userId = null)
+                            is SessionStatus.Authenticated -> {
+                                val user = status.session.user
+                                old.copy(
+                                    restoring = false, signedIn = true, userId = user?.id,
+                                    userEmail = user?.email,
+                                    fullName = (user?.userMetadata?.get("full_name") as? JsonPrimitive)?.contentOrNull,
+                                )
+                            }
+                            is SessionStatus.NotAuthenticated -> old.copy(restoring = false, signedIn = false, userId = null, userEmail = null, fullName = null)
                             is SessionStatus.RefreshFailure -> old.copy(restoring = false,
                                 message = "Your saved account is available offline. Reports will sync when connected.")
                         }
@@ -75,7 +86,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private fun request(block: suspend () -> Unit) {
         if (state.value.loading) return
         if (client == null) {
-            mutableState.update { it.copy(error = "Add the Supabase project URL and public key to local.properties, then rebuild the app.") }
+            mutableState.update { it.copy(error = "Add the Supabase project URL and publishable key to roadwatch.properties, then rebuild the app.") }
             return
         }
         mutableState.update { it.copy(loading = true, error = null, message = null) }
@@ -169,7 +180,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             // Clearing locally also works without internet; pending reports remain owned by this account.
             client!!.auth.clearSession()
             setRecovery(false)
-            mutableState.update { it.copy(signedIn = false, userId = null) }
+            mutableState.update { it.copy(signedIn = false, userId = null, userEmail = null, fullName = null) }
         }
     }
 

@@ -48,7 +48,7 @@ class DashboardScreenTest {
         val screenshot=instrumentation.uiAutomation.takeScreenshot()
         java.io.File(instrumentation.targetContext.getExternalFilesDir(null),"qa-map-dashboard.png").outputStream().use { screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         compose.onNodeWithContentDescription("Back to Home").performClick()
-        compose.onNodeWithText("Welcome to RoadWatch.").assertIsDisplayed()
+        compose.onNodeWithText("Scan a photo, a video, or use your phone’s camera.").assertIsDisplayed()
     }
     @Test fun sampleScanProducesReviewableDetection() {
         preferences.edit().putBoolean("intro_v1", true).commit()

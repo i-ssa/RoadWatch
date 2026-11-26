@@ -4,9 +4,25 @@ Native Android pothole scanning with a bundled YOLO11s ONNX model, optional fore
 
 ## Run
 
-Use Android Studio with the installed SDK matching `compileSdk`, and configure the public Supabase URL/key in `local.properties` as described in [SUPABASE_SETUP.md](SUPABASE_SETUP.md). Apply the supplied SQL migration once. No admin key belongs in the app.
+1. In Android Studio, select **Open** and choose this folder (the one containing `settings.gradle.kts`). Install Android SDK Platform 37 via SDK Manager and use JDK 25 for Gradle. The included wrapper uses Gradle 9.5.0.
+2. Copy `roadwatch.properties.example` to `roadwatch.properties` in this folder. Add only the settings for the services you plan to use. Gradle checks this file first, then environment variables, then the legacy `local.properties` entries.
+3. Sync Gradle, select the **app** run configuration and a device, and click **Run**. Use an Android 8.0+ device with a rear camera or an emulator with a virtual camera. A Google APIs or Google Play image is needed for the native map on an emulator.
 
-Connect an Android 8.0+ device with a rear camera, or use an emulator. An emulator's virtual camera shows a simulated scene; a real phone uses its rear camera. Enable USB debugging only for development, select the device in Android Studio, then Run. Installing an APK directly does not require USB debugging.
+| Settings | Used for |
+| --- | --- |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Sign-in, cloud report sync and shared hazards. See [Supabase setup](SUPABASE_SETUP.md) for auth and database migrations. |
+| `MAPS_API_KEY` | Google basemap. See [Google Maps setup](GOOGLE_MAPS_SETUP.md) for the Android package and certificate restrictions. |
+| `GEMINI_API_KEY` | Optional cloud verification of Video Scan candidates. Initial detection runs on the device. |
+
+Debug and release builds compile with blank service settings. Supabase is needed for initial sign-in. An existing account can reopen offline, and map tiles and Gemini verification require their respective services. An Android APK exposes build-time client keys to anyone who inspects it. Use a Supabase publishable or anon key and a restricted Maps key. Use a disposable Gemini key for local testing and leave it blank in any APK you share.
+
+## Project layout
+
+- `app/src/main/java/com/example/roadwatch/ui/` contains the Jetpack Compose screens, navigation, scanning and map UI.
+- `app/src/main/java/com/example/roadwatch/data/` contains authentication, report persistence and background sync.
+- `app/src/main/assets/` includes the ONNX model, and `app/src/main/res/` contains Android resources.
+- `app/src/test/` and `app/src/androidTest/` contain local and device tests.
+- `supabase/migrations/` contains the database schema and security policies.
 
 ## Scan and review
 
@@ -50,7 +66,7 @@ The default APK contains ARM64, ARMv7, x86 and x86_64 libraries. Native librarie
 
 ## Boundaries
 
-Boxes are model suggestions, not verified defects. The app does not estimate pothole depth or severity, count unique defects across frames, send reports to a road authority, or record in the background. Submitted hazard coordinates are shared with signed-in users; drafts, original reports and photos stay private. Hazard alerts, moderation and notifications need separate product/backend decisions. Camera frames without detections are not retained.
+Boxes are model suggestions, not verified defects. The app does not estimate pothole depth or severity, count unique defects across frames, or record in the background. Submitted hazard coordinates are shared with signed-in users; drafts, original reports and photos stay private. Hazard alerts, moderation and notifications need separate product/backend decisions. Camera frames without detections are not retained.
 
 To create a release signing key on a new machine, run `python3 scripts/create_signing_key.py` once. It refuses to overwrite existing credentials. If `.signing/` already exists, preserve its key. Back up that directory privately before relying on release upgrades. Then run `./gradlew :app:assembleRelease`; Gradle reads `.signing/release.properties`. Without those credentials, release output is unsigned. Never commit or upload the signing directory as a public artifact.
 
@@ -62,7 +78,7 @@ Version 1.2.0 replaces the web map with Maps SDK for Android and Maps Compose. S
 
 No map ID is set. This build does not call Places, Routes, Street View or the Map Tiles API. The app and SDK request English, although Google may retain local-language place names alongside English. Private draft and shared submitted hazard markers, current-location centering, pinch gestures, and zoom buttons use the native map. Map padding keeps the Google logo and attribution clear of the action panel.
 
-Debug builds can compile without a key and display a map-unavailable state while preserving Scan/Reports access. A missing key blocks release builds. Live map/zoom tests require a valid key; a keyless build cannot validate Google authentication or tile rendering.
+With a blank Maps key, the map displays a setup message. Live map and zoom tests require a valid key.
 
 ## Workflow reliability
 
@@ -73,3 +89,13 @@ Version 1.2.1 isolates upload errors per submitted report so one failure does no
 The map centers at street level on a fresh foreground GPS fix when opened. The target requests a new fix and returns to the user's location after browsing. Shared coordinates refresh every 15 seconds while the map is foregrounded. The deployed `20261103_shared_hazards.sql` migration publishes only submitted reports; report/photo ownership stays private. Nearby accurate sightings are grouped on the server, and markers show distinct reporter counts. See SUPABASE_SETUP.md for deployment evidence and the limitations of proximity matching.
 
 Compose BOM 2026.04.01 keeps UI, runtime and UI tests on 1.11.0, matching the existing lifecycle dependency. The previous BOM mixed 1.10 UI tests with the 1.11 runtime and failed during asynchronous map updates.
+
+## Road authority complaints (1.2.4)
+
+In **Detections → Review captures**, select **Report pothole to authority** below the relevant photo. Each complaint uses one capture and can be prepared directly from a local draft. **Submit report** remains the separate RoadWatch sync and community-map action.
+
+RoadWatch uses Android's reverse geocoder to look up the road name and county from the saved GPS fix. It suggests a recipient for recognized Kenyan trunk-road references and a limited set of named roads from agency or county maintenance records. Nearby roads, service lanes, shared responsibilities and stale road names can produce ambiguous matches. Review the suggested recipient or choose one manually. Use the [Kenya Roads Board road conditions and reporting map](https://maps.krb.go.ke/kenya-roads-board12769/maps/110400/2-road-network-conditions-map) to check the affected segment.
+
+- [KeNHA](https://kenha.co.ke/report-an-incident/), [KURA](https://kura.go.ke/report-incident/), [KeRRA](https://kerra.go.ke/kerra-complaint-handling-form/) and [Mombasa County](https://eportal.mombasa.go.ke/#contact-form) open their official forms inside RoadWatch and prefill the fields available there. Review and submit on the form.
+- On KeNHA's form, use **Upload Photo** and confirm the selected capture. Email drafts for the three agencies and Nairobi or Mombasa county contacts can attach the photo in a compatible email app. The scanner saves JPEG captures.
+- Nairobi County opens its [county contacts](https://nairobi.go.ke/faqs-and-help-desks). Other counties can use the [Senate county website directory](https://www.parliament.go.ke/the-senate/counties) and **Copy report details**. The email draft and copy actions are also useful when a form changes or cannot load.

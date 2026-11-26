@@ -1,58 +1,50 @@
 package com.example.roadwatch.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = Color(0xFFACDABA),
+    onPrimary = Color(0xFF143622),
+    background = Color(0xFF131A16),
+    onBackground = Color(0xFFE6EEE8),
+    surface = Color(0xFF131A16),
+    onSurface = Color(0xFFE6EEE8),
+    surfaceVariant = Color(0xFF253329),
+    onSurfaceVariant = Color(0xFFB8C7BD),
+    surfaceContainerHigh = Color(0xFF243128),
+    outline = Color(0xFF899D8E),
+    outlineVariant = Color(0xFF44534A),
+    secondaryContainer = Color(0xFF263C2E),
+    onSecondaryContainer = Color(0xFFDBEDE0),
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+    primary = Color(0xFF194C35),
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    background = Color(0xFFFBFCF8),
+    onBackground = Color(0xFF192921),
+    surface = Color(0xFFFBFCF8),
+    onSurface = Color(0xFF192921),
+    surfaceVariant = Color(0xFFE8F0E9),
+    onSurfaceVariant = Color(0xFF44584C),
+    surfaceContainerHigh = Color(0xFFE8F0E9),
+    outline = Color(0xFF64786A),
+    outlineVariant = Color(0xFFD5DFD6),
+    secondaryContainer = Color(0xFFE8F0E9),
+    onSecondaryContainer = Color(0xFF26392D),
 )
+
+internal fun roadWatchColors(dark: Boolean) = if (dark) DarkColorScheme else LightColorScheme
 
 @Composable
 fun RoadWatchTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    MaterialTheme(colorScheme = roadWatchColors(darkTheme), typography = Typography, content = content)
 }

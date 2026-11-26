@@ -1,6 +1,6 @@
 # RoadWatch authentication
 
-Add the project URL and **publishable** key (or legacy public anon key) to the ignored `local.properties` file alongside `sdk.dir`:
+Add the project URL and **publishable** key (or legacy public anon key) to the ignored `roadwatch.properties` file. Start with `roadwatch.properties.example`:
 
 ```properties
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co

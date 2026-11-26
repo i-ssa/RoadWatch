@@ -7,6 +7,9 @@ import com.example.roadwatch.data.auth.AuthViewModel
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import com.example.roadwatch.ui.navigation.RoadWatchApp
 import com.example.roadwatch.ui.theme.RoadWatchTheme
 
@@ -22,7 +25,9 @@ class MainActivity : ComponentActivity() {
         auth.handleIntent(intent)
         enableEdgeToEdge()
         setContent {
-            RoadWatchTheme { RoadWatchApp(auth) }
+            RoadWatchTheme {
+                Surface(Modifier.fillMaxSize()) { RoadWatchApp(auth) }
+            }
         }
     }
 

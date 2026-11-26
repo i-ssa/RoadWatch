@@ -1,0 +1,10 @@
+# Copy to roadwatch.properties in this directory. Leave unused services blank.
+# Supabase project URL and publishable (or public anon) key.
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+
+# Google Maps SDK for Android key, restricted to the app package and signing SHA-1.
+MAPS_API_KEY=
+
+# Gemini API key for optional verification in Video Scan.
+GEMINI_API_KEY=

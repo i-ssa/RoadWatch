@@ -44,7 +44,10 @@ fun RoadWatchApp(auth: AuthViewModel) {
         state.signedIn -> Column(Modifier.fillMaxSize()) {
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Box(Modifier.weight(1f)) {
-                DashboardScreen(onBack = auth::signOut, isSigningOut = state.loading, owner = state.userId)
+                DashboardScreen(
+                    onBack = auth::signOut, isSigningOut = state.loading, owner = state.userId,
+                    email = state.userEmail, fullName = state.fullName,
+                )
             }
         }
         showAuth || state.recovering || state.error != null -> RoadWatchAuthFlow(

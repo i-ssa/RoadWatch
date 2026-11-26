@@ -10,6 +10,13 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+
     <application
         android:name=".RoadWatchApplication"
         android:allowBackup="false"
@@ -20,6 +27,15 @@
         android:roundIcon="@mipmap/roadwatch_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RoadWatch">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.complaint.photos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/complaint_photo_paths" />
+        </provider>
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />

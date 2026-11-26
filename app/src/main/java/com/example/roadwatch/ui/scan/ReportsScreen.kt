@@ -15,11 +15,12 @@ import java.text.DateFormat
 import java.util.Date
 
 @Composable
-fun ReportsScreen(owner: String) {
+fun ReportsScreen(owner: String, email: String? = null, fullName: String? = null) {
     val context=LocalContext.current
     val scope=rememberCoroutineScope()
     val store=remember { ReportStore.get(context) }
     var reports by remember(owner) { mutableStateOf(emptyList<ScanReport>()) }
+    var complaint by remember(owner) { mutableStateOf<Capture?>(null) }
     var selected by remember(owner) { mutableStateOf<String?>(null) }
     var deleting by remember(owner) { mutableStateOf<ScanReport?>(null) }
     var feedback by remember(owner) { mutableStateOf<String?>(null) }
@@ -54,9 +55,11 @@ fun ReportsScreen(owner: String) {
                 report.syncError?.let { Text(it, color=MaterialTheme.colorScheme.error) }
                 TextButton(onClick={selected=if(selected==report.id) null else report.id}) { Text("Review captures") }
                 if(selected==report.id) {
-                    CaptureList(store,report.id,revision,editable=report.status=="draft" && !busy) { capture ->
-                        change { check(store.removeCapture(capture.id,report.id,owner)) }
-                    }
+                    CaptureList(
+                        store, report.id, revision, editable = report.status == "draft" && !busy,
+                        onComplaint = if (report.status != "recording" && !busy) { capture -> complaint = capture } else null,
+                        remove = { capture -> change { check(store.removeCapture(capture.id, report.id, owner)) } },
+                    )
                     if(report.status=="draft") {
                         Text("Submitting uploads this report when connected and shares its pothole locations with other signed-in users. Photos remain private. Submitted reports cannot be edited here.")
                         Button(enabled=!busy,onClick={change {
@@ -73,6 +76,7 @@ fun ReportsScreen(owner: String) {
             }
         }
     } }
+    complaint?.let { capture -> ComplaintReview(capture, email, fullName) { complaint = null } }
     deleting?.let { report ->
         AlertDialog(onDismissRequest={deleting=null},title={Text(if(report.status=="draft") "Delete draft?" else "Remove local copy?")},
             text={Text(if(report.status=="draft") "This permanently removes the draft and its images from this device." else "This frees space on this device. The submitted report and images remain in your cloud account.")},
@@ -82,7 +86,10 @@ fun ReportsScreen(owner: String) {
 }
 
 @Composable
-private fun CaptureList(store: ReportStore, reportId: String, revision: Int, editable: Boolean, remove: (Capture) -> Unit) {
+private fun CaptureList(
+    store: ReportStore, reportId: String, revision: Int, editable: Boolean,
+    onComplaint: ((Capture) -> Unit)?, remove: (Capture) -> Unit,
+) {
     var captures by remember(reportId) { mutableStateOf(emptyList<Capture>()) }
     var page by remember(reportId) { mutableIntStateOf(0) }
     LaunchedEffect(reportId,revision) { captures=withContext(Dispatchers.IO) { store.captures(reportId) } }
@@ -91,6 +98,7 @@ private fun CaptureList(store: ReportStore, reportId: String, revision: Int, edi
     val currentPage=page.coerceAtMost(pageCount-1)
     captures.drop(currentPage*5).take(5).forEach { capture -> key(capture.id) {
         CaptureImage(capture)
+        if (onComplaint != null) TextButton(onClick = { onComplaint(capture) }) { Text("Report pothole to authority") }
         if(editable) TextButton(onClick={remove(capture)}) { Text("Remove capture") }
         HorizontalDivider(Modifier.padding(vertical=12.dp))
     } }

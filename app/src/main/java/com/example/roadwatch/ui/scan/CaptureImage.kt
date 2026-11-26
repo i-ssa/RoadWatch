@@ -39,6 +39,11 @@ fun CaptureImage(capture: Capture) {
     for(index in 0 until boxes.length()) {
         Text("Possible pothole ${index+1} · ${(boxes.getJSONObject(index).optDouble("confidence",0.0)*100).toInt()}% confidence")
     }
-    Text(if(capture.latitude!=null && capture.longitude!=null) "Location: %.5f, %.5f · accuracy ±%.0f m".format(capture.latitude,capture.longitude,capture.accuracy ?: 0f) else "Location unavailable for this capture")
+    val coordinates = capture.coordinates()
+    Text(when {
+        coordinates == null -> "Location unavailable for this capture"
+        capture.accuracy == null -> "Video GPS tag: $coordinates"
+        else -> "GPS: $coordinates · accuracy ±%.0f m".format(capture.accuracy)
+    })
     Text("Model suggestion · severity has not been measured")
 }

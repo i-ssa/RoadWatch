@@ -36,19 +36,24 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.roadwatch.R
+import com.example.roadwatch.ui.theme.roadWatchColors
+import com.example.roadwatch.ui.scan.JourneySystemBars
 import kotlinx.coroutines.delay
 
 /** Native UI backed by local demonstration data. Authentication remains owned by the host. */
 @Composable
-fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: String? = null) {
+fun DashboardScreen(
+    onBack: () -> Unit,
+    isSigningOut: Boolean = false,
+    owner: String? = null,
+    email: String? = null,
+    fullName: String? = null,
+) {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("roadwatch_ui", Context.MODE_PRIVATE) }
     var appearance by rememberSaveable { mutableStateOf(preferences.getString("appearance", "system") ?: "system") }
     val dark = appearance == "dark" || (appearance == "system" && isSystemInDarkTheme())
-    val colors = if (dark) darkColorScheme(primary = Color(0xFF9FD0B1), onPrimary = Color(0xFF10271A),
-        background = Color(0xFF131A16), surface = Color(0xFF131A16), surfaceVariant = Color(0xFF1C2620), onSurface = Color(0xFFE6EEE8), onSurfaceVariant = Color(0xFFA2B0A6), outlineVariant = Color(0xFF2A352E), secondaryContainer = Color(0xFF263C2E))
-    else lightColorScheme(primary = Color(0xFF0D472F), onPrimary = Color.White,
-        background = Color.White, surface = Color.White, surfaceVariant = Color(0xFFF4F6F4), onSurface = Color(0xFF17251E), onSurfaceVariant = Color(0xFF69756E), outlineVariant = Color(0xFFE9EDEA), secondaryContainer = Color(0xFFE8F0EB))
+    val colors = roadWatchColors(dark)
     var route by rememberSaveable { mutableStateOf("Home") }
     var onboarding by rememberSaveable { mutableStateOf(!preferences.getBoolean("intro_v1", false)) }
     var step by rememberSaveable { mutableIntStateOf(0) }
@@ -76,12 +81,22 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
         }
         return
     }
+    if (route == "Video scan" && owner != null) {
+        JourneySystemBars(darkIcons = !dark)
+        MaterialTheme(colorScheme=colors, typography=PreviewTypography) {
+            Surface(Modifier.fillMaxSize()) {
+                com.example.roadwatch.ui.scan.VideoScanScreen(owner, onBack = { route = "Home" })
+            }
+        }
+        return
+    }
     if (route == "Scan" && owner != null) {
         MaterialTheme(colorScheme=colors,typography=PreviewTypography) {
             com.example.roadwatch.ui.scan.ScanScreen(owner) { scanning = false; route = "Detections" }
         }
         return
     }
+    JourneySystemBars(darkIcons = !dark)
     MaterialTheme(colorScheme = colors, typography = PreviewTypography) {
         Scaffold(containerColor = colors.background, topBar = {
             Column(Modifier.fillMaxWidth().statusBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -143,9 +158,22 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                     if (step > 0) TextButton(onClick = { step-- }) { Text("Back") }
                 } else when (route) {
                     "Home" -> {
-                        IconBadge(0); Heading("Welcome to RoadWatch.")
-                        Body("Your next journey can help make roads better. Start a scan when you’re ready.")
-                        Spacer(Modifier.height(24.dp)); Action("Start scan") { dialog = "setup" }
+                        if (owner != null) {
+                            Heading("Home")
+                            Body("Scan a photo, a video, or use your phone’s camera.")
+                            Spacer(Modifier.height(24.dp))
+                            Action("Upload photo or video") { route = "Video scan" }
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = { dialog = "setup" },
+                                modifier = Modifier.widthIn(max = 310.dp).fillMaxWidth().heightIn(min = 56.dp),
+                                shape = RoundedCornerShape(8.dp),
+                            ) { Text("Live camera scan") }
+                        } else {
+                            IconBadge(0); Heading("Welcome to RoadWatch.")
+                            Body("Your next journey can help make roads better. Start a scan when you’re ready.")
+                            Spacer(Modifier.height(24.dp)); Action("Start scan") { dialog = "setup" }
+                        }
                         Spacer(Modifier.height(32.dp)); Text("Recent activity", style = MaterialTheme.typography.titleMedium)
                         HorizontalDivider(Modifier.padding(vertical = 20.dp))
                         if (owner != null) {
@@ -167,7 +195,7 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                     "Detections" -> {
                         Heading("Detections"); Body("Review what was spotted before submitting a report.")
                         if (owner != null) {
-                            com.example.roadwatch.ui.scan.ReportsScreen(owner)
+                            com.example.roadwatch.ui.scan.ReportsScreen(owner, email, fullName)
                         } else if (captured) {
                             SampleRoad(true); Text("Possible pothole", style = MaterialTheme.typography.titleLarge)
                             Caption("Sample route · location not confirmed\nSeverity not assessed")
@@ -228,7 +256,13 @@ fun DashboardScreen(onBack: () -> Unit, isSigningOut: Boolean = false, owner: St
                         "signout" -> onBack()
                     }
                 }) { Text(when(kind) { "setup" -> if (owner != null) "Start camera scan" else "Try sample scan"; "stop" -> "Stop scan"; "report" -> "Prepare sample draft"; "signout" -> "Sign out"; else -> "Got it" }) } },
-                dismissButton = { if (kind in listOf("setup", "stop", "report", "signout")) TextButton(onClick = { dialog = null }) { Text("Cancel") } })
+                dismissButton = {
+                    if (kind == "setup" && owner != null) {
+                        TextButton(onClick = { dialog = null; route = "Video scan" }) { Text("Scan a photo or video") }
+                    } else if (kind in listOf("setup", "stop", "report", "signout")) {
+                        TextButton(onClick = { dialog = null }) { Text("Cancel") }
+                    }
+                })
         }
     }
 }

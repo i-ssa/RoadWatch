@@ -5,7 +5,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val authProperties = Properties().apply {
+val serviceProperties = Properties().apply {
+    val file = rootProject.file("roadwatch.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
@@ -13,11 +17,19 @@ val releaseProperties = Properties().apply {
     val file = rootProject.file(".signing/release.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
-fun authConfig(name: String): String = "\"" +
-    (authProperties.getProperty(name) ?: System.getenv(name).orEmpty())
-        .replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+fun serviceSetting(name: String): String =
+    sequenceOf(serviceProperties.getProperty(name), System.getenv(name), localProperties.getProperty(name))
+        .map { it.orEmpty().trim() }
+        .firstOrNull { it.isNotEmpty() }
+        .orEmpty()
 
-val mapsApiKey = (authProperties.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY").orEmpty()).trim()
+fun buildConfigString(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\r", "\\r")
+    .replace("\n", "\\n") + "\""
+
+val mapsApiKey = serviceSetting("MAPS_API_KEY")
 
 android {
     namespace = "com.example.roadwatch"
@@ -32,10 +44,11 @@ android {
         }
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "1.2.3"
-        buildConfigField("String", "SUPABASE_URL", authConfig("SUPABASE_URL"))
-        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", authConfig("SUPABASE_PUBLISHABLE_KEY"))
+        versionCode = 16
+        versionName = "1.2.10"
+        buildConfigField("String", "GEMINI_API_KEY", buildConfigString(serviceSetting("GEMINI_API_KEY")))
+        buildConfigField("String", "SUPABASE_URL", buildConfigString(serviceSetting("SUPABASE_URL")))
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", buildConfigString(serviceSetting("SUPABASE_PUBLISHABLE_KEY")))
 
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         buildConfigField("boolean", "MAPS_CONFIGURED", mapsApiKey.isNotBlank().toString())
@@ -69,14 +82,6 @@ android {
         compose = true
         buildConfig = true
     }
-}
-
-// Prevent distributing a release whose Google basemap cannot authenticate.
-tasks.matching { it.name == "preReleaseBuild" }.configureEach {
-    val keyConfigured = mapsApiKey.isNotBlank()
-    doFirst { check(keyConfigured) {
-        "Google Maps setup required: add MAPS_API_KEY to local.properties (see GOOGLE_MAPS_SETUP.md)."
-    } }
 }
 
 dependencies {

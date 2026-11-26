@@ -77,7 +77,11 @@ class ReportStore internal constructor(private val context: Context, databaseNam
         try {
             writableDatabase.insertOrThrow("captures", null, ContentValues().apply {
                 put("id", id); put("report_id", reportId); put("path", file.absolutePath); put("boxes", boxes.toString()); put("captured_at", System.currentTimeMillis())
-                location?.let { put("latitude",it.latitude); put("longitude",it.longitude); put("accuracy",it.accuracy) }
+                location?.let {
+                    put("latitude", it.latitude)
+                    put("longitude", it.longitude)
+                    if (it.hasAccuracy()) put("accuracy", it.accuracy)
+                }
             })
         } catch(e: Exception) { file.delete(); throw e }
     }
